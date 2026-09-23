@@ -2,4 +2,17 @@
 <resources>
 
     <style name="Theme.Kilivanadriver" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!--
+         Splash window theme.
+         Applied to the launcher activity only. The window background is the
+         Kilivana brand green so the screen is filled immediately while Compose
+         starts. It is replaced by the Compose content in MainActivity.onCreate.
+    -->
+    <style name="Theme.Kilivanadriver.Splash" parent="Theme.Kilivanadriver">
+        <item name="android:windowBackground">@drawable/kilivana_splash_background</item>
+        <item name="android:statusBarColor">@color/kilivana_green_900</item>
+        <item name="android:navigationBarColor">@color/kilivana_green_900</item>
+    </style>
+
 </resources>

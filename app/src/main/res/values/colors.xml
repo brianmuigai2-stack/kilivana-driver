@@ -7,4 +7,10 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Kilivana brand palette, derived from the Kilivana logo (deep agricultural green). -->
+    <color name="kilivana_green_900">#FF0A3723</color>
+    <color name="kilivana_green_700">#FF155E3D</color>
+    <color name="kilivana_green_500">#FF1A724A</color>
+    <color name="kilivana_green_50">#FFF3F6F2</color>
 </resources>

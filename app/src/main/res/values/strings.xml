@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Kilivana-driver</string>
+    <string name="kilivana_app_name">Kilivana</string>
+    <string name="kilivana_logo_content_desc">Kilivana logo</string>
 </resources>

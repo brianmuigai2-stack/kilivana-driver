@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Fills the window background with the Kilivana brand green while the
+     Compose content starts. The logo itself is drawn by Compose in
+     KilivanaSplashScreen, so this file is intentionally a solid color only.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/kilivana_green_700" />
+</layer-list>
