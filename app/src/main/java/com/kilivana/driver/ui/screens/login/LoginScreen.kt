@@ -39,6 +39,7 @@ import com.example.kilivana_driver.ui.theme.KilivanadriverTheme
 
 @Composable
 fun LoginScreen(
+    onLoginSuccess: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var email by remember { mutableStateOf(TextFieldValue("")) }
@@ -112,7 +113,7 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         ElevatedButton(
-            onClick = { /* authentication wired later */ },
+            onClick = { onLoginSuccess() },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
@@ -136,6 +137,6 @@ fun LoginScreen(
 @Composable
 fun LoginScreenPreview() {
     KilivanadriverTheme {
-        LoginScreen()
+        LoginScreen(onLoginSuccess = {})
     }
 }

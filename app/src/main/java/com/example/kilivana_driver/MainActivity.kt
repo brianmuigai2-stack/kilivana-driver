@@ -13,8 +13,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.kilivana_driver.ui.splash.KilivanaSplashScreen
-import com.kilivana.driver.ui.screens.login.LoginScreen
 import com.example.kilivana_driver.ui.theme.KilivanadriverTheme
+import com.kilivana.driver.ui.screens.dashboard.DriverDashboard
+import com.kilivana.driver.ui.screens.login.LoginScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,17 +35,27 @@ class MainActivity : ComponentActivity() {
 fun KilivanaApp(
     modifier: Modifier = Modifier
 ) {
-    // Simple UI-only state machine: splash first, then the login form.
+    // Simple UI-only state machine: splash -> login -> dashboard.
     // No navigation component, no auth logic, no network code.
     var showLogin by remember { mutableStateOf(false) }
+    var showDashboard by remember { mutableStateOf(false) }
 
-    if (showLogin) {
-        LoginScreen(modifier = modifier)
-    } else {
-        KilivanaSplashScreen(
-            modifier = modifier,
-            onSplashFinished = { showLogin = true }
-        )
+    when {
+        showDashboard -> {
+            DriverDashboard(modifier = modifier)
+        }
+        showLogin -> {
+            LoginScreen(
+                modifier = modifier,
+                onLoginSuccess = { showDashboard = true }
+            )
+        }
+        else -> {
+            KilivanaSplashScreen(
+                modifier = modifier,
+                onSplashFinished = { showLogin = true }
+            )
+        }
     }
 }
 
