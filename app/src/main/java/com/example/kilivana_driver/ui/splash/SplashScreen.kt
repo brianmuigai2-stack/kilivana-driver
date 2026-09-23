@@ -33,7 +33,8 @@ import com.example.kilivana_driver.ui.theme.KilivanadriverTheme
 
 @Composable
 fun KilivanaSplashScreen(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSplashFinished: () -> Unit = {}
 ) {
     val logoScale = remember { Animatable(0.6f) }
     val textAlpha = remember { Animatable(0f) }
@@ -47,6 +48,7 @@ fun KilivanaSplashScreen(
             targetValue = 1f,
             animationSpec = tween(durationMillis = 600, easing = EaseIn)
         )
+        onSplashFinished()
     }
 
     Column(
