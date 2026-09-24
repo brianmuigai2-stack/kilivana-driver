@@ -24,6 +24,7 @@ import com.example.kilivana_driver.ui.screens.dashboard.DashboardUiState
 import com.example.kilivana_driver.ui.screens.jobs.JobDetailsScreen
 import com.example.kilivana_driver.ui.screens.jobs.JobsScreen
 import com.example.kilivana_driver.ui.screens.jobs.JobsUiState
+import com.example.kilivana_driver.ui.screens.map.MapScreen
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 
@@ -89,7 +90,7 @@ fun MainScreen(
                         onFilterClick = { /* TODO: filter sheet */ },
                         onJobClick = { job -> selectedJobId = job.id }
                     )
-                    BottomTab.MAP -> ComingSoon("Map")
+                    BottomTab.MAP -> MapScreen()
                     BottomTab.MORE -> ComingSoon("More")
                 }
             }
