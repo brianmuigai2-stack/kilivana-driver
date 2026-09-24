@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardViewModel
+import com.example.kilivana_driver.ui.screens.jobs.JobsViewModel
 import com.example.kilivana_driver.ui.screens.login.LoginScreen
 import com.example.kilivana_driver.ui.screens.login.LoginViewModel
 import com.example.kilivana_driver.ui.screens.main.MainScreen
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
 
     private val loginViewModel: LoginViewModel by viewModels()
     private val dashboardViewModel: DashboardViewModel by viewModels()
+    private val jobsViewModel: JobsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,15 +35,21 @@ class MainActivity : ComponentActivity() {
                 var showSplash by rememberSaveable { mutableStateOf(true) }
                 val loginState by loginViewModel.uiState.collectAsState()
                 val dashboardState by dashboardViewModel.uiState.collectAsState()
+                val jobsState by jobsViewModel.uiState.collectAsState()
 
                 // Only the splash sits on a dark photo (white status icons);
-                // login and dashboard are light (dark status icons).
+                // login and the main app are light (dark status icons).
                 LaunchedEffect(showSplash) { setSystemBars(darkHeader = showSplash) }
 
                 when {
                     showSplash -> SplashScreen(onFinished = { showSplash = false })
 
-                    loginState.isLoggedIn -> MainScreen(dashboardState = dashboardState)
+                    loginState.isLoggedIn -> MainScreen(
+                        dashboardState = dashboardState,
+                        jobsState = jobsState,
+                        onJobStatusSelected = jobsViewModel::onStatusSelected,
+                        onAcceptJob = jobsViewModel::acceptJob
+                    )
 
                     else -> LoginScreen(
                         uiState = loginState,

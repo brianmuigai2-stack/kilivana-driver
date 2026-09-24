@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Map
-import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.outlined.Work
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -29,9 +29,9 @@ import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
 enum class BottomTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Outlined.Home),
-    JOBS("Jobs", Icons.Outlined.Work),
-    MAP("Map", Icons.Outlined.Map),
-    MORE("More", Icons.Outlined.Menu)
+    JOBS("Jobs", Icons.Outlined.Description),
+    MAP("Map", Icons.Outlined.LocationOn),
+    MORE("More", Icons.Outlined.MoreHoriz)
 }
 
 @Composable
