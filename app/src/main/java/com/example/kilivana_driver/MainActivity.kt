@@ -1,70 +1,71 @@
 package com.example.kilivana_driver
 
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
+import androidx.activity.viewModels
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.example.kilivana_driver.ui.splash.KilivanaSplashScreen
-import com.example.kilivana_driver.ui.theme.KilivanadriverTheme
-import com.kilivana.driver.ui.screens.dashboard.DriverDashboard
-import com.kilivana.driver.ui.screens.login.LoginScreen
+import com.example.kilivana_driver.ui.screens.dashboard.DashboardViewModel
+import com.example.kilivana_driver.ui.screens.login.LoginScreen
+import com.example.kilivana_driver.ui.screens.login.LoginViewModel
+import com.example.kilivana_driver.ui.screens.main.MainScreen
+import com.example.kilivana_driver.ui.screens.splash.SplashScreen
+import com.example.kilivana_driver.ui.theme.KilivanaTheme
 
 class MainActivity : ComponentActivity() {
+
+    private val loginViewModel: LoginViewModel by viewModels()
+    private val dashboardViewModel: DashboardViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        setSystemBars(darkHeader = true)
         setContent {
-            KilivanadriverTheme {
-                KilivanaApp(
-                    modifier = Modifier.fillMaxSize()
-                )
+            KilivanaTheme {
+                var showSplash by rememberSaveable { mutableStateOf(true) }
+                val loginState by loginViewModel.uiState.collectAsState()
+                val dashboardState by dashboardViewModel.uiState.collectAsState()
+
+                // Only the splash sits on a dark photo (white status icons);
+                // login and dashboard are light (dark status icons).
+                LaunchedEffect(showSplash) { setSystemBars(darkHeader = showSplash) }
+
+                when {
+                    showSplash -> SplashScreen(onFinished = { showSplash = false })
+
+                    loginState.isLoggedIn -> MainScreen(dashboardState = dashboardState)
+
+                    else -> LoginScreen(
+                        uiState = loginState,
+                        onPhoneChange = loginViewModel::onPhoneChange,
+                        onPasswordChange = loginViewModel::onPasswordChange,
+                        onTogglePasswordVisibility = loginViewModel::onTogglePasswordVisibility,
+                        onRememberMeChange = loginViewModel::onRememberMeChange,
+                        onLoginClick = loginViewModel::onLoginClick,
+                        onForgotPassword = { /* TODO: tell the driver to ask their admin for a reset */ },
+                        onContactSupport = { /* TODO: open dialer or WhatsApp to dispatch */ }
+                    )
+                }
             }
         }
     }
-}
 
-@Composable
-fun KilivanaApp(
-    modifier: Modifier = Modifier
-) {
-    // Simple UI-only state machine: splash -> login -> dashboard.
-    // No navigation component, no auth logic, no network code.
-    var showLogin by remember { mutableStateOf(false) }
-    var showDashboard by remember { mutableStateOf(false) }
-
-    when {
-        showDashboard -> {
-            DriverDashboard(modifier = modifier)
-        }
-        showLogin -> {
-            LoginScreen(
-                modifier = modifier,
-                onLoginSuccess = { showDashboard = true }
-            )
-        }
-        else -> {
-            KilivanaSplashScreen(
-                modifier = modifier,
-                onSplashFinished = { showLogin = true }
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun MainActivityPreview() {
-    KilivanadriverTheme {
-        KilivanaApp(
-            modifier = Modifier.fillMaxSize()
+    private fun setSystemBars(darkHeader: Boolean) {
+        enableEdgeToEdge(
+            statusBarStyle = if (darkHeader) {
+                SystemBarStyle.dark(Color.TRANSPARENT)
+            } else {
+                SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+            },
+            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         )
     }
 }
