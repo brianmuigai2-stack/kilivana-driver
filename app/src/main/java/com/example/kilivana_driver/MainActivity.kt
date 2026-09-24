@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.kilivana_driver.ui.splash.KilivanaSplashScreen
 import com.example.kilivana_driver.ui.theme.KilivanadriverTheme
+import com.kilivana.driver.ui.components.DriverBottomNavDestination
 import com.kilivana.driver.ui.screens.dashboard.DriverDashboard
 import com.kilivana.driver.ui.screens.login.LoginScreen
 
@@ -39,10 +40,19 @@ fun KilivanaApp(
     // No navigation component, no auth logic, no network code.
     var showLogin by remember { mutableStateOf(false) }
     var showDashboard by remember { mutableStateOf(false) }
+    var selectedDestination by remember { mutableStateOf(DriverBottomNavDestination.Dashboard) }
 
     when {
         showDashboard -> {
-            DriverDashboard(modifier = modifier)
+            DriverDashboard(
+                modifier = modifier,
+                currentDestination = selectedDestination,
+                onNavSelected = { destination ->
+                    selectedDestination = destination
+                    // Maps, History and Profile screens are not built yet.
+                    // The bar tracks the selection; only the Dashboard screen exists.
+                }
+            )
         }
         showLogin -> {
             LoginScreen(

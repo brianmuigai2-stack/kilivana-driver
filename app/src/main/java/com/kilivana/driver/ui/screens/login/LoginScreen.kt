@@ -36,6 +36,7 @@ import com.example.kilivana_driver.R
 import com.example.kilivana_driver.ui.theme.Green700
 import com.example.kilivana_driver.ui.theme.Green900
 import com.example.kilivana_driver.ui.theme.KilivanadriverTheme
+import com.kilivana.driver.ui.components.ScreenScaffold
 
 @Composable
 fun LoginScreen(
@@ -45,14 +46,18 @@ fun LoginScreen(
     var email by remember { mutableStateOf(TextFieldValue("")) }
     var password by remember { mutableStateOf(TextFieldValue("")) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.White)
-            .padding(horizontal = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    ScreenScaffold(
+        modifier = modifier,
+        containerColor = Color.White
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+                .padding(horizontal = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
         Image(
             painter = painterResource(id = R.drawable.kilivana_logo),
             contentDescription = stringResource(id = R.string.kilivana_logo_content_desc),
@@ -130,6 +135,7 @@ fun LoginScreen(
                 fontWeight = FontWeight.SemiBold
             )
         }
+    }
     }
 }
 

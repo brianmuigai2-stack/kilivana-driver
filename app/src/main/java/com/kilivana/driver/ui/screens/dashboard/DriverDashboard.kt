@@ -11,9 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -31,6 +30,9 @@ import com.example.kilivana_driver.ui.theme.Green700
 import com.example.kilivana_driver.ui.theme.Green900
 import com.example.kilivana_driver.ui.theme.Green500
 import com.example.kilivana_driver.ui.theme.KilivanadriverTheme
+import com.kilivana.driver.ui.components.DriverBottomAppBar
+import com.kilivana.driver.ui.components.DriverBottomNavDestination
+import com.kilivana.driver.ui.components.ScreenScaffold
 
 /**
  * Driver dashboard.
@@ -51,44 +53,61 @@ enum class JobStatus { TODAY, PENDING, ACTIVE }
 @Composable
 fun DriverDashboard(
     jobs: List<DriverJob> = emptyList(),
+    currentDestination: DriverBottomNavDestination = DriverBottomNavDestination.Dashboard,
+    onNavSelected: (DriverBottomNavDestination) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val todayJobs = jobs.filter { it.status == JobStatus.TODAY }
     val pendingJobs = jobs.filter { it.status == JobStatus.PENDING }
     val activeJobs = jobs.filter { it.status == JobStatus.ACTIVE }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.White)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Green900)
-                .padding(horizontal = 20.dp, vertical = 24.dp)
-        ) {
-            Text(
-                text = "Driver Dashboard",
-                color = Color.White,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Your delivery overview",
-                color = Color(0xFFCDE8D8),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Normal
+    ScreenScaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = Color.White,
+        topBar = {
+            // Full-bleed header background drawn to the very top of the screen,
+            // including behind the status bar. The header text/icons are inset
+            // below the status bar so they never overlap the phone's time,
+            // battery, signal or notification icons.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Green900)
+                    .statusBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 24.dp)
+            ) {
+                Text(
+                    text = "Driver Dashboard",
+                    color = Color.White,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Your delivery overview",
+                    color = Color(0xFFCDE8D8),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Normal
+                )
+            }
+        },
+        bottomBar = {
+            DriverBottomAppBar(
+                currentDestination = currentDestination,
+                onDestinationSelected = onNavSelected
             )
         }
-
+    ) { padding ->
         LazyColumn(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+                .padding(padding),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
                 JobSection(
+                    modifier = Modifier.padding(horizontal = 20.dp),
                     title = "Today's jobs",
                     jobs = todayJobs,
                     accent = Green700
@@ -96,6 +115,7 @@ fun DriverDashboard(
             }
             item {
                 JobSection(
+                    modifier = Modifier.padding(horizontal = 20.dp),
                     title = "Pending jobs",
                     jobs = pendingJobs,
                     accent = Color(0xFFE0A458)
@@ -103,6 +123,7 @@ fun DriverDashboard(
             }
             item {
                 JobSection(
+                    modifier = Modifier.padding(horizontal = 20.dp),
                     title = "Active delivery",
                     jobs = activeJobs,
                     accent = Color(0xFF4A90D9)
@@ -114,11 +135,15 @@ fun DriverDashboard(
 
 @Composable
 private fun JobSection(
+    modifier: Modifier = Modifier,
     title: String,
     jobs: List<DriverJob>,
     accent: Color
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
