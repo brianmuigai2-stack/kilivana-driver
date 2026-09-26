@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
+import com.example.kilivana_driver.data.model.Driver
 import com.example.kilivana_driver.data.model.JobStatus
 import com.example.kilivana_driver.ui.components.BottomTab
 import com.example.kilivana_driver.ui.components.KilivanaBottomBar
@@ -25,6 +26,7 @@ import com.example.kilivana_driver.ui.screens.jobs.JobDetailsScreen
 import com.example.kilivana_driver.ui.screens.jobs.JobsScreen
 import com.example.kilivana_driver.ui.screens.jobs.JobsUiState
 import com.example.kilivana_driver.ui.screens.map.MapScreen
+import com.example.kilivana_driver.ui.screens.profile.ProfileScreen
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 
@@ -32,8 +34,10 @@ import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 fun MainScreen(
     dashboardState: DashboardUiState,
     jobsState: JobsUiState,
+    driver: Driver,
     onJobStatusSelected: (JobStatus) -> Unit,
-    onAcceptJob: (String) -> Unit
+    onAcceptJob: (String) -> Unit,
+    onLogout: () -> Unit
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
     var selectedJobId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -82,7 +86,7 @@ fun MainScreen(
                         onMyJobsClick = { selectedTab = BottomTab.JOBS },
                         onMapRouteClick = { selectedTab = BottomTab.MAP },
                         onHistoryClick = { /* TODO */ },
-                        onProfileClick = { /* TODO */ }
+                        onProfileClick = { selectedTab = BottomTab.MORE }
                     )
                     BottomTab.JOBS -> JobsScreen(
                         uiState = jobsState,
@@ -91,25 +95,19 @@ fun MainScreen(
                         onJobClick = { job -> selectedJobId = job.id }
                     )
                     BottomTab.MAP -> MapScreen()
-                    BottomTab.MORE -> ComingSoon("More")
+                    BottomTab.MORE -> ProfileScreen(
+                        driver = driver,
+                        onSettingsClick = { /* TODO */ },
+                        onPersonalInfoClick = { /* TODO */ },
+                        onVehicleDetailsClick = { /* TODO */ },
+                        onBankDetailsClick = { /* TODO */ },
+                        onChangePasswordClick = { /* TODO */ },
+                        onNotificationsClick = { /* TODO */ },
+                        onHelpClick = { /* TODO */ },
+                        onLogout = onLogout
+                    )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ComingSoon(title: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "$title coming soon 🚧",
-            color = KilivanaTextMuted,
-            fontSize = 16.sp
-        )
     }
 }

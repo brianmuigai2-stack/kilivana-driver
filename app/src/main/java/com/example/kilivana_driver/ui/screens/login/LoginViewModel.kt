@@ -38,6 +38,10 @@ class LoginViewModel : ViewModel() {
         _uiState.update { it.copy(passwordVisible = !it.passwordVisible) }
     }
 
+    fun onLogout() {
+        _uiState.update { LoginUiState() }
+    }
+
     fun onRememberMeChange(value: Boolean) {
         // TODO: persist with DataStore once real auth is wired up
         _uiState.update { it.copy(rememberMe = value) }

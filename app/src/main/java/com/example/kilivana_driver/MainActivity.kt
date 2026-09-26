@@ -18,6 +18,7 @@ import com.example.kilivana_driver.ui.screens.jobs.JobsViewModel
 import com.example.kilivana_driver.ui.screens.login.LoginScreen
 import com.example.kilivana_driver.ui.screens.login.LoginViewModel
 import com.example.kilivana_driver.ui.screens.main.MainScreen
+import com.example.kilivana_driver.ui.screens.profile.ProfileViewModel
 import com.example.kilivana_driver.ui.screens.splash.SplashScreen
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
     private val loginViewModel: LoginViewModel by viewModels()
     private val dashboardViewModel: DashboardViewModel by viewModels()
     private val jobsViewModel: JobsViewModel by viewModels()
+    private val profileViewModel: ProfileViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +38,7 @@ class MainActivity : ComponentActivity() {
                 val loginState by loginViewModel.uiState.collectAsState()
                 val dashboardState by dashboardViewModel.uiState.collectAsState()
                 val jobsState by jobsViewModel.uiState.collectAsState()
+                val driver by profileViewModel.driver.collectAsState()
 
                 // Only the splash sits on a dark photo (white status icons);
                 // login and the main app are light (dark status icons).
@@ -47,8 +50,10 @@ class MainActivity : ComponentActivity() {
                     loginState.isLoggedIn -> MainScreen(
                         dashboardState = dashboardState,
                         jobsState = jobsState,
+                        driver = driver,
                         onJobStatusSelected = jobsViewModel::onStatusSelected,
-                        onAcceptJob = jobsViewModel::acceptJob
+                        onAcceptJob = jobsViewModel::acceptJob,
+                        onLogout = loginViewModel::onLogout
                     )
 
                     else -> LoginScreen(
