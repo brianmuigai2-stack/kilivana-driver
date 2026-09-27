@@ -43,9 +43,14 @@ class MainActivity : ComponentActivity() {
                 val driver by profileViewModel.driver.collectAsState()
                 val settingsState by settingsViewModel.uiState.collectAsState()
 
-                // Only the splash sits on a dark photo (white status icons);
-                // login and the main app are light (dark status icons).
-                LaunchedEffect(showSplash) { setSystemBars(darkHeader = showSplash) }
+                // Splash and login are dark backgrounds (white icons); once
+                // logged in, MainScreen tells us when Profile (also dark) is
+                // showing so we can switch icon color to match.
+                LaunchedEffect(showSplash, loginState.isLoggedIn) {
+                    if (showSplash || !loginState.isLoggedIn) {
+                        setSystemBars(darkHeader = true)
+                    }
+                }
 
                 when {
                     showSplash -> SplashScreen(onFinished = { showSplash = false })
@@ -61,7 +66,8 @@ class MainActivity : ComponentActivity() {
                         onNotificationSoundChange = settingsViewModel::onNotificationSoundChange,
                         onDarkModeChange = settingsViewModel::onDarkModeChange,
                         onLanguageSelected = settingsViewModel::onLanguageSelected,
-                        onLogout = loginViewModel::onLogout
+                        onLogout = loginViewModel::onLogout,
+                        onSetStatusBarDark = { dark -> setSystemBars(darkHeader = dark) }
                     )
 
                     else -> LoginScreen(

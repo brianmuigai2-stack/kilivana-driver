@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -45,7 +46,8 @@ fun MainScreen(
     onNotificationSoundChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
     onLanguageSelected: (AppLanguage) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onSetStatusBarDark: (Boolean) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
     var selectedJobId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -58,6 +60,11 @@ fun MainScreen(
     // System back closes whichever overlay is open first
     BackHandler(enabled = selectedJob != null) { selectedJobId = null }
     BackHandler(enabled = showSettings && selectedJob == null) { showSettings = false }
+
+    // Profile has a full-bleed green header, so it needs white status bar
+    // icons; every other screen here is light, so it needs dark icons.
+    val isMapVisible = selectedTab == BottomTab.MAP && !showSettings && selectedJob == null
+    LaunchedEffect(isMapVisible) { onSetStatusBarDark(!isMapVisible) }
 
     when {
         showSettings -> SettingsScreen(

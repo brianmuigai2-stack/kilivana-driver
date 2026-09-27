@@ -85,9 +85,10 @@ fun ProfileScreen(
             .fillMaxSize()
             .background(KilivanaBackground)
             .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
             .navigationBarsPadding()
     ) {
+        // No statusBarsPadding here: the green header paints behind the
+        // status bar, and only the icons/text inside it are pushed down.
         ProfileHeader(
             driver = driver,
             onBack = onBack,
@@ -205,6 +206,7 @@ private fun ProfileHeader(
             .fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
             .background(KilivanaGreenCard)
+            .statusBarsPadding()
             .padding(bottom = 28.dp)
     ) {
         Row(

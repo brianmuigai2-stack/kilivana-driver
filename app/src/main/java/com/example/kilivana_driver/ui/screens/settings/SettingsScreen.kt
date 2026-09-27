@@ -63,6 +63,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaGreenTint
 import com.example.kilivana_driver.ui.theme.KilivanaNotificationRed
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
+import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
@@ -89,9 +90,9 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(KilivanaBackground)
             .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
             .navigationBarsPadding()
     ) {
+        KilivanaStatusBarScrim()
         TopBar(title = "Settings", onBack = onBack)
 
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {

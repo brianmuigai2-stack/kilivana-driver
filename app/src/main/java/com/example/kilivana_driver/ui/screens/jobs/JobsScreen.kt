@@ -54,6 +54,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaGreenTint
 import com.example.kilivana_driver.ui.theme.KilivanaNotificationRed
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
+import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 import java.util.Locale
@@ -72,8 +73,8 @@ fun JobsScreen(
         modifier = modifier
             .fillMaxSize()
             .background(KilivanaBackground)
-            .statusBarsPadding()
     ) {
+        KilivanaStatusBarScrim()
         JobsHeader(onFilterClick = onFilterClick)
 
         Row(
