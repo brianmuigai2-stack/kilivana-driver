@@ -14,9 +14,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardViewModel
+import com.example.kilivana_driver.ui.screens.jobs.JobsViewModel
 import com.example.kilivana_driver.ui.screens.login.LoginScreen
 import com.example.kilivana_driver.ui.screens.login.LoginViewModel
 import com.example.kilivana_driver.ui.screens.main.MainScreen
+import com.example.kilivana_driver.ui.screens.profile.ProfileViewModel
+import com.example.kilivana_driver.ui.screens.settings.SettingsViewModel
 import com.example.kilivana_driver.ui.screens.splash.SplashScreen
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 
@@ -24,6 +27,9 @@ class MainActivity : ComponentActivity() {
 
     private val loginViewModel: LoginViewModel by viewModels()
     private val dashboardViewModel: DashboardViewModel by viewModels()
+    private val jobsViewModel: JobsViewModel by viewModels()
+    private val profileViewModel: ProfileViewModel by viewModels()
+    private val settingsViewModel: SettingsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,15 +39,36 @@ class MainActivity : ComponentActivity() {
                 var showSplash by rememberSaveable { mutableStateOf(true) }
                 val loginState by loginViewModel.uiState.collectAsState()
                 val dashboardState by dashboardViewModel.uiState.collectAsState()
+                val jobsState by jobsViewModel.uiState.collectAsState()
+                val driver by profileViewModel.driver.collectAsState()
+                val settingsState by settingsViewModel.uiState.collectAsState()
 
-                // Only the splash sits on a dark photo (white status icons);
-                // login and dashboard are light (dark status icons).
-                LaunchedEffect(showSplash) { setSystemBars(darkHeader = showSplash) }
+                // Splash and login are dark backgrounds (white icons); once
+                // logged in, MainScreen tells us when Profile (also dark) is
+                // showing so we can switch icon color to match.
+                LaunchedEffect(showSplash, loginState.isLoggedIn) {
+                    if (showSplash || !loginState.isLoggedIn) {
+                        setSystemBars(darkHeader = true)
+                    }
+                }
 
                 when {
                     showSplash -> SplashScreen(onFinished = { showSplash = false })
 
-                    loginState.isLoggedIn -> MainScreen(dashboardState = dashboardState)
+                    loginState.isLoggedIn -> MainScreen(
+                        dashboardState = dashboardState,
+                        jobsState = jobsState,
+                        driver = driver,
+                        settingsState = settingsState,
+                        onJobStatusSelected = jobsViewModel::onStatusSelected,
+                        onAcceptJob = jobsViewModel::acceptJob,
+                        onPushNotificationsChange = settingsViewModel::onPushNotificationsChange,
+                        onNotificationSoundChange = settingsViewModel::onNotificationSoundChange,
+                        onDarkModeChange = settingsViewModel::onDarkModeChange,
+                        onLanguageSelected = settingsViewModel::onLanguageSelected,
+                        onLogout = loginViewModel::onLogout,
+                        onSetStatusBarDark = { dark -> setSystemBars(darkHeader = dark) }
+                    )
 
                     else -> LoginScreen(
                         uiState = loginState,

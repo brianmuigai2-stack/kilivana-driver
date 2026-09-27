@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBlue
 import com.example.kilivana_driver.ui.theme.KilivanaBlueTint
@@ -65,49 +65,51 @@ fun DashboardScreen(
             .fillMaxSize()
             .background(KilivanaBackground)
             .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
-        DashboardHeader(
-            uiState = uiState,
-            onNotificationsClick = onNotificationsClick
-        )
+        KilivanaStatusBarScrim()
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        ScheduleCard(
-            deliveries = uiState.deliveriesAssigned,
-            estimatedTransit = uiState.estimatedTransit
-        )
-
-        SectionTitle(text = "Quick Actions", topSpace = 24.dp)
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            QuickActionCard("My Jobs", Icons.Outlined.Work, onMyJobsClick, Modifier.weight(1f))
-            QuickActionCard("Map Route", Icons.Outlined.Map, onMapRouteClick, Modifier.weight(1f))
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            QuickActionCard("History", Icons.Outlined.History, onHistoryClick, Modifier.weight(1f))
-            QuickActionCard("Profile", Icons.Outlined.Person, onProfileClick, Modifier.weight(1f))
-        }
-
-        SectionTitle(text = "Recent Activity", topSpace = 24.dp)
-
-        if (uiState.recentActivity.isEmpty()) {
-            Text(
-                text = "No recent activity yet.",
-                color = KilivanaTextMuted,
-                fontSize = 14.sp
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+            DashboardHeader(
+                uiState = uiState,
+                onNotificationsClick = onNotificationsClick
             )
-        } else {
-            uiState.recentActivity.forEachIndexed { index, item ->
-                if (index > 0) Spacer(modifier = Modifier.height(12.dp))
-                ActivityRow(item = item)
-            }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+
+            ScheduleCard(
+                deliveries = uiState.deliveriesAssigned,
+                estimatedTransit = uiState.estimatedTransit
+            )
+
+            SectionTitle(text = "Quick Actions", topSpace = 24.dp)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                QuickActionCard("My Jobs", Icons.Outlined.Work, onMyJobsClick, Modifier.weight(1f))
+                QuickActionCard("Map Route", Icons.Outlined.Map, onMapRouteClick, Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                QuickActionCard("History", Icons.Outlined.History, onHistoryClick, Modifier.weight(1f))
+                QuickActionCard("Profile", Icons.Outlined.Person, onProfileClick, Modifier.weight(1f))
+            }
+
+            SectionTitle(text = "Recent Activity", topSpace = 24.dp)
+
+            if (uiState.recentActivity.isEmpty()) {
+                Text(
+                    text = "No recent activity yet.",
+                    color = KilivanaTextMuted,
+                    fontSize = 14.sp
+                )
+            } else {
+                uiState.recentActivity.forEachIndexed { index, item ->
+                    if (index > 0) Spacer(modifier = Modifier.height(12.dp))
+                    ActivityRow(item = item)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
     }
 }
 

@@ -18,3 +18,7 @@ val KilivanaTextPrimary = Color(0xFF1C1F1D)
 val KilivanaBlue = Color(0xFF3B82F6)
 val KilivanaBlueTint = Color(0xFFE8F1FD)
 val KilivanaNotificationRed = Color(0xFFE53935)
+
+val KilivanaAmber = Color(0xFFE08A00)
+val KilivanaAmberTint = Color(0xFFFFF3DC)
+
