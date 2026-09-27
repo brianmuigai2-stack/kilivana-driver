@@ -24,6 +24,7 @@ import com.example.kilivana_driver.ui.components.KilivanaBottomBar
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardScreen
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardUiState
 import com.example.kilivana_driver.ui.screens.jobs.JobDetailsScreen
+import com.example.kilivana_driver.ui.screens.jobs.JobRouteScreen
 import com.example.kilivana_driver.ui.screens.jobs.JobsScreen
 import com.example.kilivana_driver.ui.screens.jobs.JobsUiState
 import com.example.kilivana_driver.ui.screens.map.MapScreen
@@ -42,6 +43,7 @@ fun MainScreen(
     settingsState: SettingsUiState,
     onJobStatusSelected: (JobStatus) -> Unit,
     onAcceptJob: (String) -> Unit,
+    onCompleteJob: (String) -> Unit,
     onPushNotificationsChange: (Boolean) -> Unit,
     onNotificationSoundChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
@@ -51,22 +53,32 @@ fun MainScreen(
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
     var selectedJobId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeTripJobId by rememberSaveable { mutableStateOf<String?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
 
-    val selectedJob = selectedJobId?.let { id ->
-        jobsState.jobs.firstOrNull { it.id == id }
-    }
+    val selectedJob = selectedJobId?.let { id -> jobsState.jobs.firstOrNull { it.id == id } }
+    val activeTripJob = activeTripJobId?.let { id -> jobsState.jobs.firstOrNull { it.id == id } }
 
-    // System back closes whichever overlay is open first
-    BackHandler(enabled = selectedJob != null) { selectedJobId = null }
-    BackHandler(enabled = showSettings && selectedJob == null) { showSettings = false }
+    BackHandler(enabled = activeTripJob != null) { activeTripJobId = null }
+    BackHandler(enabled = selectedJob != null && activeTripJob == null) { selectedJobId = null }
+    BackHandler(enabled = showSettings && selectedJob == null && activeTripJob == null) { showSettings = false }
 
-    // Profile has a full-bleed green header, so it needs white status bar
-    // icons; every other screen here is light, so it needs dark icons.
-    val isMapVisible = selectedTab == BottomTab.MAP && !showSettings && selectedJob == null
-    LaunchedEffect(isMapVisible) { onSetStatusBarDark(!isMapVisible) }
+    // Any screen with a map on it (Map tab or En Route) keeps the default
+    // dark status bar icons; every other screen gets white icons over green.
+    val isMapLikeVisible = (selectedTab == BottomTab.MAP || activeTripJob != null) &&
+        !showSettings && selectedJob == null
+    LaunchedEffect(isMapLikeVisible) { onSetStatusBarDark(!isMapLikeVisible) }
 
     when {
+        activeTripJob != null -> JobRouteScreen(
+            job = activeTripJob,
+            onBack = { activeTripJobId = null },
+            onDeliveryComplete = {
+                onCompleteJob(activeTripJob.id)
+                activeTripJobId = null
+            }
+        )
+
         showSettings -> SettingsScreen(
             uiState = settingsState,
             onBack = { showSettings = false },
@@ -86,13 +98,17 @@ fun MainScreen(
             onBack = { selectedJobId = null },
             onAccept = {
                 onAcceptJob(selectedJob.id)
+                activeTripJobId = selectedJob.id
                 selectedJobId = null
             },
             onDecline = {
                 // TODO: tell the API the driver declined this job
                 selectedJobId = null
             },
-            onStartTrip = { /* TODO: open the En Route screen */ }
+            onStartTrip = {
+                activeTripJobId = selectedJob.id
+                selectedJobId = null
+            }
         )
 
         else -> Scaffold(
