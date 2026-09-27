@@ -19,6 +19,7 @@ import com.example.kilivana_driver.ui.screens.login.LoginScreen
 import com.example.kilivana_driver.ui.screens.login.LoginViewModel
 import com.example.kilivana_driver.ui.screens.main.MainScreen
 import com.example.kilivana_driver.ui.screens.profile.ProfileViewModel
+import com.example.kilivana_driver.ui.screens.settings.SettingsViewModel
 import com.example.kilivana_driver.ui.screens.splash.SplashScreen
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
     private val dashboardViewModel: DashboardViewModel by viewModels()
     private val jobsViewModel: JobsViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
+    private val settingsViewModel: SettingsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +41,7 @@ class MainActivity : ComponentActivity() {
                 val dashboardState by dashboardViewModel.uiState.collectAsState()
                 val jobsState by jobsViewModel.uiState.collectAsState()
                 val driver by profileViewModel.driver.collectAsState()
+                val settingsState by settingsViewModel.uiState.collectAsState()
 
                 // Only the splash sits on a dark photo (white status icons);
                 // login and the main app are light (dark status icons).
@@ -51,8 +54,13 @@ class MainActivity : ComponentActivity() {
                         dashboardState = dashboardState,
                         jobsState = jobsState,
                         driver = driver,
+                        settingsState = settingsState,
                         onJobStatusSelected = jobsViewModel::onStatusSelected,
                         onAcceptJob = jobsViewModel::acceptJob,
+                        onPushNotificationsChange = settingsViewModel::onPushNotificationsChange,
+                        onNotificationSoundChange = settingsViewModel::onNotificationSoundChange,
+                        onDarkModeChange = settingsViewModel::onDarkModeChange,
+                        onLanguageSelected = settingsViewModel::onLanguageSelected,
                         onLogout = loginViewModel::onLogout
                     )
 
