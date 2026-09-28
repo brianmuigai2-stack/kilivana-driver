@@ -18,6 +18,7 @@ import com.example.kilivana_driver.ui.screens.jobs.JobsViewModel
 import com.example.kilivana_driver.ui.screens.login.LoginScreen
 import com.example.kilivana_driver.ui.screens.login.LoginViewModel
 import com.example.kilivana_driver.ui.screens.main.MainScreen
+import com.example.kilivana_driver.ui.screens.notifications.NotificationsViewModel
 import com.example.kilivana_driver.ui.screens.profile.ProfileViewModel
 import com.example.kilivana_driver.ui.screens.settings.SettingsViewModel
 import com.example.kilivana_driver.ui.screens.splash.SplashScreen
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private val jobsViewModel: JobsViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
+    private val notificationsViewModel: NotificationsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,10 +44,11 @@ class MainActivity : ComponentActivity() {
                 val jobsState by jobsViewModel.uiState.collectAsState()
                 val driver by profileViewModel.driver.collectAsState()
                 val settingsState by settingsViewModel.uiState.collectAsState()
+                val notificationsState by notificationsViewModel.uiState.collectAsState()
 
                 // Splash and login are dark backgrounds (white icons); once
-                // logged in, MainScreen tells us when Profile (also dark) is
-                // showing so we can switch icon color to match.
+                // logged in, MainScreen tells us when a map screen is showing
+                // so we can switch icon color to match.
                 LaunchedEffect(showSplash, loginState.isLoggedIn) {
                     if (showSplash || !loginState.isLoggedIn) {
                         setSystemBars(darkHeader = true)
@@ -60,6 +63,7 @@ class MainActivity : ComponentActivity() {
                         jobsState = jobsState,
                         driver = driver,
                         settingsState = settingsState,
+                        notificationsState = notificationsState,
                         onJobStatusSelected = jobsViewModel::onStatusSelected,
                         onAcceptJob = jobsViewModel::acceptJob,
                         onCompleteJob = jobsViewModel::completeJob,
@@ -67,6 +71,8 @@ class MainActivity : ComponentActivity() {
                         onNotificationSoundChange = settingsViewModel::onNotificationSoundChange,
                         onDarkModeChange = settingsViewModel::onDarkModeChange,
                         onLanguageSelected = settingsViewModel::onLanguageSelected,
+                        onNotificationClick = notificationsViewModel::markRead,
+                        onMarkAllNotificationsRead = notificationsViewModel::markAllRead,
                         onLogout = loginViewModel::onLogout,
                         onSetStatusBarDark = { dark -> setSystemBars(darkHeader = dark) }
                     )

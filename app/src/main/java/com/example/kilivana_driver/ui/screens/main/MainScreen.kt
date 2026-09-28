@@ -27,6 +27,8 @@ import com.example.kilivana_driver.ui.screens.jobs.JobRouteScreen
 import com.example.kilivana_driver.ui.screens.jobs.JobsScreen
 import com.example.kilivana_driver.ui.screens.jobs.JobsUiState
 import com.example.kilivana_driver.ui.screens.map.MapScreen
+import com.example.kilivana_driver.ui.screens.notifications.NotificationsScreen
+import com.example.kilivana_driver.ui.screens.notifications.NotificationsUiState
 import com.example.kilivana_driver.ui.screens.profile.ProfileScreen
 import com.example.kilivana_driver.ui.screens.settings.AppLanguage
 import com.example.kilivana_driver.ui.screens.settings.SettingsScreen
@@ -39,6 +41,7 @@ fun MainScreen(
     jobsState: JobsUiState,
     driver: Driver,
     settingsState: SettingsUiState,
+    notificationsState: NotificationsUiState,
     onJobStatusSelected: (JobStatus) -> Unit,
     onAcceptJob: (String) -> Unit,
     onCompleteJob: (String) -> Unit,
@@ -46,6 +49,8 @@ fun MainScreen(
     onNotificationSoundChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
     onLanguageSelected: (AppLanguage) -> Unit,
+    onNotificationClick: (String) -> Unit,
+    onMarkAllNotificationsRead: () -> Unit,
     onLogout: () -> Unit,
     onSetStatusBarDark: (Boolean) -> Unit = {}
 ) {
@@ -53,6 +58,7 @@ fun MainScreen(
     var selectedJobId by rememberSaveable { mutableStateOf<String?>(null) }
     var activeTripJobId by rememberSaveable { mutableStateOf<String?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showNotifications by rememberSaveable { mutableStateOf(false) }
     var showHistory by rememberSaveable { mutableStateOf(false) }
     var tabBeforeHistory by rememberSaveable { mutableStateOf(BottomTab.HOME) }
 
@@ -71,13 +77,17 @@ fun MainScreen(
     BackHandler(enabled = selectedJob != null && activeTripJob == null) { selectedJobId = null }
     BackHandler(enabled = showSettings && selectedJob == null && activeTripJob == null) { showSettings = false }
     BackHandler(
-        enabled = showHistory && !showSettings && selectedJob == null && activeTripJob == null
+        enabled = showNotifications && !showSettings && selectedJob == null && activeTripJob == null
+    ) { showNotifications = false }
+    BackHandler(
+        enabled = showHistory && !showNotifications && !showSettings &&
+            selectedJob == null && activeTripJob == null
     ) { closeHistory() }
 
     // Any screen with a map on it (Map tab or En Route) keeps the default
     // dark status bar icons; every other screen gets white icons over green.
     val isMapLikeVisible = (selectedTab == BottomTab.MAP || activeTripJob != null) &&
-        !showSettings && selectedJob == null
+        !showSettings && !showNotifications && selectedJob == null
     LaunchedEffect(isMapLikeVisible) { onSetStatusBarDark(!isMapLikeVisible) }
 
     when {
@@ -102,6 +112,13 @@ fun MainScreen(
             onPrivacyClick = { /* TODO */ },
             onAboutClick = { /* TODO */ },
             onLogout = onLogout
+        )
+
+        showNotifications -> NotificationsScreen(
+            uiState = notificationsState,
+            onBack = { showNotifications = false },
+            onNotificationClick = onNotificationClick,
+            onMarkAllRead = onMarkAllNotificationsRead
         )
 
         selectedJob != null -> JobDetailsScreen(
@@ -148,8 +165,11 @@ fun MainScreen(
                 } else {
                     when (selectedTab) {
                         BottomTab.HOME -> DashboardScreen(
-                            uiState = dashboardState,
-                            onNotificationsClick = { /* TODO */ },
+                            // The bell's red dot follows the real unread count
+                            uiState = dashboardState.copy(
+                                hasUnreadNotifications = notificationsState.unreadCount > 0
+                            ),
+                            onNotificationsClick = { showNotifications = true },
                             onMyJobsClick = { selectedTab = BottomTab.JOBS },
                             onMapRouteClick = { selectedTab = BottomTab.MAP },
                             onHistoryClick = {
@@ -174,7 +194,7 @@ fun MainScreen(
                             onVehicleDetailsClick = { /* TODO */ },
                             onBankDetailsClick = { /* TODO */ },
                             onChangePasswordClick = { /* TODO */ },
-                            onNotificationsClick = { /* TODO */ },
+                            onNotificationsClick = { showNotifications = true },
                             onHelpClick = { /* TODO */ },
                             onLogout = onLogout
                         )
