@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
                         settingsState = settingsState,
                         onJobStatusSelected = jobsViewModel::onStatusSelected,
                         onAcceptJob = jobsViewModel::acceptJob,
+                        onCompleteJob = jobsViewModel::completeJob,
                         onPushNotificationsChange = settingsViewModel::onPushNotificationsChange,
                         onNotificationSoundChange = settingsViewModel::onNotificationSoundChange,
                         onDarkModeChange = settingsViewModel::onDarkModeChange,
