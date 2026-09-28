@@ -299,7 +299,7 @@ fun JobRouteScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Showing an estimated route — no internet for live roads",
+                        text = "Showing an estimated route (live roads unavailable)",
                         color = KilivanaAmber,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold

@@ -1,5 +1,6 @@
 package com.example.kilivana_driver.data.routing
 
+import android.util.Log
 import org.json.JSONObject
 import org.osmdroid.util.GeoPoint
 import java.net.HttpURLConnection
@@ -9,7 +10,9 @@ import java.util.Locale
 data class RouteResult(
     val points: List<GeoPoint>,
     /** True if this is a real road-following route; false if it's a fallback straight line. */
-    val isRealRoute: Boolean
+    val isRealRoute: Boolean,
+    /** Why the real route failed (null when it succeeded). Also written to Logcat. */
+    val failureReason: String? = null
 )
 
 /**
@@ -23,9 +26,15 @@ data class RouteResult(
  */
 object RouteRepository {
 
+    private const val TAG = "RouteRepository"
     private const val BASE_URL = "https://router.project-osrm.org/route/v1/driving"
 
+    // The public OSRM server, like OSM's tile servers, expects clients to
+    // identify themselves. Keep this in step with the tile User-Agent.
+    private const val USER_AGENT = "KilivanaDriver/1.0 (Kilivana agricultural logistics app)"
+
     fun fetchRoute(from: GeoPoint, to: GeoPoint): RouteResult {
+        var connection: HttpURLConnection? = null
         return try {
             val url = URL(
                 String.format(
@@ -34,15 +43,25 @@ object RouteRepository {
                     BASE_URL, from.longitude, from.latitude, to.longitude, to.latitude
                 )
             )
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 8000
-                readTimeout = 8000
+            connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 10_000
+                readTimeout = 10_000
                 requestMethod = "GET"
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Accept", "application/json")
             }
-            val body = connection.inputStream.bufferedReader().use { it.readText() }
-            connection.disconnect()
 
-            val coords = JSONObject(body)
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+
+            val json = JSONObject(body)
+            val code = json.optString("code")
+            if (status !in 200..299 || code != "Ok") {
+                return fallback(from, to, "HTTP $status, OSRM code '$code'")
+            }
+
+            val coords = json
                 .getJSONArray("routes")
                 .getJSONObject(0)
                 .getJSONObject("geometry")
@@ -54,11 +73,18 @@ object RouteRepository {
             }
             RouteResult(points = points, isRealRoute = true)
         } catch (e: Exception) {
-            // Offline, timeout, or the demo server is busy: fall back to a
-            // straight line so the screen still shows a usable route. The
-            // caller shows a note to the driver when this happens.
-            RouteResult(points = listOf(from, to), isRealRoute = false)
+            fallback(from, to, "${e.javaClass.simpleName}: ${e.message}")
+        } finally {
+            connection?.disconnect()
         }
+    }
+
+    private fun fallback(from: GeoPoint, to: GeoPoint, reason: String): RouteResult {
+        Log.w(
+            TAG,
+            "Route failed (${from.latitude},${from.longitude} -> ${to.latitude},${to.longitude}): $reason"
+        )
+        return RouteResult(points = listOf(from, to), isRealRoute = false, failureReason = reason)
     }
 
     /** Rough length of a route in km, by summing point-to-point distances. */
