@@ -74,7 +74,6 @@ class MainActivity : ComponentActivity() {
                         onLanguageSelected = settingsViewModel::onLanguageSelected,
                         onNotificationClick = notificationsViewModel::markRead,
                         onMarkAllNotificationsRead = notificationsViewModel::markAllRead,
-                        onLogout = loginViewModel::onLogout,
                         onSendTestNotification = {
                             NotificationHelper.postJobAlert(
                                 context = this@MainActivity,
@@ -84,6 +83,8 @@ class MainActivity : ComponentActivity() {
                                 soundEnabled = settingsState.notificationSoundEnabled
                             )
                         },
+                        onTestApiConnection = settingsViewModel::testApiConnection,
+                        onLogout = loginViewModel::onLogout,
                         onSetStatusBarDark = { dark -> setSystemBars(darkHeader = dark) }
                     )
 
