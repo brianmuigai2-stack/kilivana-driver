@@ -68,6 +68,11 @@ fun MainScreen(
     val selectedJob = selectedJobId?.let { id -> jobsState.jobs.firstOrNull { it.id == id } }
     val activeTripJob = activeTripJobId?.let { id -> jobsState.jobs.firstOrNull { it.id == id } }
 
+    // The job currently accepted but not yet delivered — used to show the
+    // "active delivery" banner on the Map tab if the driver wanders off
+    // from the En Route screen without finishing.
+    val acceptedJob = jobsState.jobs.firstOrNull { it.status == JobStatus.ACCEPTED }
+
     val closeHistory: () -> Unit = {
         selectedTab = tabBeforeHistory
         showHistory = false
@@ -165,7 +170,6 @@ fun MainScreen(
                 } else {
                     when (selectedTab) {
                         BottomTab.HOME -> DashboardScreen(
-                            // The bell's red dot follows the real unread count
                             uiState = dashboardState.copy(
                                 hasUnreadNotifications = notificationsState.unreadCount > 0
                             ),
@@ -173,7 +177,6 @@ fun MainScreen(
                             onMyJobsClick = { selectedTab = BottomTab.JOBS },
                             onMapRouteClick = { selectedTab = BottomTab.MAP },
                             onHistoryClick = {
-                                // Remember where we came from, and highlight Jobs like the Figma design
                                 tabBeforeHistory = selectedTab
                                 selectedTab = BottomTab.JOBS
                                 showHistory = true
@@ -186,7 +189,12 @@ fun MainScreen(
                             onFilterClick = { /* TODO: filter sheet */ },
                             onJobClick = { job -> selectedJobId = job.id }
                         )
-                        BottomTab.MAP -> MapScreen()
+                        BottomTab.MAP -> MapScreen(
+                            activeJob = acceptedJob,
+                            onResumeActiveJob = {
+                                acceptedJob?.let { activeTripJobId = it.id }
+                            }
+                        )
                         BottomTab.MORE -> ProfileScreen(
                             driver = driver,
                             onSettingsClick = { showSettings = true },

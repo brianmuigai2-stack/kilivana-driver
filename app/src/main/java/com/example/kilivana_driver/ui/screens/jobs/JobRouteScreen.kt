@@ -23,12 +23,16 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,6 +46,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -84,6 +89,12 @@ private const val DRIVER_BLUE = 0xFF3B82F6.toInt()
 private const val FARMER_GREEN = 0xFF2E7D32.toInt()
 private const val BUYER_RED = 0xFFE53935.toInt()
 
+// How far the driver has to move, and how long we wait between calls,
+// before we ask OSRM for a fresh route. Keeps the line hugging the real
+// road as the driver moves, without hammering the free routing server.
+private const val REROUTE_DISTANCE_METERS = 300.0
+private const val REROUTE_MIN_INTERVAL_MS = 15_000L
+
 @Composable
 fun JobRouteScreen(
     job: Job,
@@ -93,14 +104,28 @@ fun JobRouteScreen(
 ) {
     val context = LocalContext.current
     var stage by remember { mutableStateOf(TripStage.HEADING_TO_PICKUP) }
+    var showOtpDialog by remember { mutableStateOf(false) }
+    var otpError by remember { mutableStateOf<String?>(null) }
 
     val pickupPoint = remember { GeoPoint(job.pickupLat, job.pickupLon) }
     val dropoffPoint = remember { GeoPoint(job.dropoffLat, job.dropoffLon) }
 
     val location by rememberUserLocation(enabled = true)
 
+    // Live route: driver's real position -> farmer (recalculated on the move)
     var routeToPickup by remember { mutableStateOf<List<GeoPoint>?>(null) }
-    var routeToDropoff by remember { mutableStateOf<List<GeoPoint>?>(null) }
+    var lastPickupOrigin by remember { mutableStateOf<GeoPoint?>(null) }
+    var lastPickupFetchTime by remember { mutableStateOf(0L) }
+
+    // One-time overview: farmer -> buyer (shown dimmed for context before pickup)
+    var previewRouteToBuyer by remember { mutableStateOf<List<GeoPoint>?>(null) }
+
+    // Live route: driver's real position -> buyer (recalculated on the move,
+    // only kicks in once the cargo has actually been picked up)
+    var liveRouteToBuyer by remember { mutableStateOf<List<GeoPoint>?>(null) }
+    var lastBuyerOrigin by remember { mutableStateOf<GeoPoint?>(null) }
+    var lastBuyerFetchTime by remember { mutableStateOf(0L) }
+
     var usingEstimatedRoute by remember { mutableStateOf(false) }
     var hasFramedRoute by remember { mutableStateOf(false) }
 
@@ -131,8 +156,6 @@ fun JobRouteScreen(
         }
     }
 
-    // Labeled pins: "You" follows the driver, "Farmer" is the pickup,
-    // "Buyer" is the drop-off — always visible so the roles are unambiguous.
     val pickupMarker = remember {
         Marker(mapView).apply {
             position = pickupPoint
@@ -158,29 +181,61 @@ fun JobRouteScreen(
     val pickupLine = remember { Polyline().apply { outlinePaint.strokeWidth = 9f } }
     val dropoffLine = remember { Polyline().apply { outlinePaint.strokeWidth = 9f } }
 
-    // Fetch the pickup -> drop-off route once; it doesn't depend on the driver's position
+    // Preview overview route (farmer -> buyer), fetched once
     LaunchedEffect(job.id) {
         val result = withContext(Dispatchers.IO) {
             RouteRepository.fetchRoute(pickupPoint, dropoffPoint)
         }
-        routeToDropoff = result.points
+        previewRouteToBuyer = result.points
         if (!result.isRealRoute) usingEstimatedRoute = true
     }
 
-    // Fetch the driver -> pickup route once we have a first GPS fix
-    LaunchedEffect(location, job.id) {
+    // Live route to the farmer: refetched whenever the driver has moved far
+    // enough, while they're still heading to pickup
+    LaunchedEffect(location, stage, job.id) {
         val fix = location ?: return@LaunchedEffect
-        if (routeToPickup == null) {
-            val result = withContext(Dispatchers.IO) {
-                RouteRepository.fetchRoute(GeoPoint(fix.latitude, fix.longitude), pickupPoint)
-            }
+        if (stage != TripStage.HEADING_TO_PICKUP) return@LaunchedEffect
+
+        val current = GeoPoint(fix.latitude, fix.longitude)
+        val origin = lastPickupOrigin
+        val now = System.currentTimeMillis()
+        val movedFar = origin == null || current.distanceToAsDouble(origin) > REROUTE_DISTANCE_METERS
+        val dueForRefresh = origin == null || now - lastPickupFetchTime > REROUTE_MIN_INTERVAL_MS
+
+        if (movedFar && dueForRefresh) {
+            lastPickupOrigin = current
+            lastPickupFetchTime = now
+            val result = withContext(Dispatchers.IO) { RouteRepository.fetchRoute(current, pickupPoint) }
             routeToPickup = result.points
             if (!result.isRealRoute) usingEstimatedRoute = true
         }
     }
 
+    // Live route to the buyer: refetched whenever the driver has moved far
+    // enough, while the cargo is in transit
+    LaunchedEffect(location, stage, job.id) {
+        val fix = location ?: return@LaunchedEffect
+        if (stage != TripStage.IN_TRANSIT) return@LaunchedEffect
+
+        val current = GeoPoint(fix.latitude, fix.longitude)
+        val origin = lastBuyerOrigin
+        val now = System.currentTimeMillis()
+        val movedFar = origin == null || current.distanceToAsDouble(origin) > REROUTE_DISTANCE_METERS
+        val dueForRefresh = origin == null || now - lastBuyerFetchTime > REROUTE_MIN_INTERVAL_MS
+
+        if (movedFar && dueForRefresh) {
+            lastBuyerOrigin = current
+            lastBuyerFetchTime = now
+            val result = withContext(Dispatchers.IO) { RouteRepository.fetchRoute(current, dropoffPoint) }
+            liveRouteToBuyer = result.points
+            if (!result.isRealRoute) usingEstimatedRoute = true
+        }
+    }
+
+    val displayedDropoffRoute = liveRouteToBuyer ?: previewRouteToBuyer
+
     // Draw / update overlays whenever anything relevant changes
-    LaunchedEffect(location, routeToPickup, routeToDropoff, stage) {
+    LaunchedEffect(location, routeToPickup, displayedDropoffRoute, stage) {
         mapView.overlays.clear()
 
         val activeAlpha = 255
@@ -192,7 +247,7 @@ fun JobRouteScreen(
             pickupLine.outlinePaint.alpha = if (stage == TripStage.HEADING_TO_PICKUP) activeAlpha else dimAlpha
             mapView.overlays.add(pickupLine)
         }
-        routeToDropoff?.let { points ->
+        displayedDropoffRoute?.let { points ->
             dropoffLine.setPoints(points)
             dropoffLine.outlinePaint.color = KilivanaNotificationRed.toArgb()
             dropoffLine.outlinePaint.alpha = if (stage == TripStage.IN_TRANSIT) activeAlpha else dimAlpha
@@ -210,8 +265,7 @@ fun JobRouteScreen(
         // Frame the whole route once we have everything, so the driver sees
         // themselves, the farmer and the buyer all at once
         if (!hasFramedRoute && location != null && routeToPickup != null) {
-            val fix = location
-            requireNotNull(fix)
+            val fix = location!!
             val box = BoundingBox.fromGeoPoints(
                 listOf(GeoPoint(fix.latitude, fix.longitude), pickupPoint, dropoffPoint)
             )
@@ -226,7 +280,7 @@ fun JobRouteScreen(
         TripStage.HEADING_TO_PICKUP -> routeToPickup?.let {
             "%.1f km to farmer".format(RouteRepository.routeLengthKm(it))
         } ?: "Finding route to farmer…"
-        TripStage.IN_TRANSIT -> routeToDropoff?.let {
+        TripStage.IN_TRANSIT -> displayedDropoffRoute?.let {
             "%.1f km to buyer".format(RouteRepository.routeLengthKm(it))
         } ?: "Finding route to buyer…"
         TripStage.DELIVERED -> "Delivered"
@@ -356,16 +410,83 @@ fun JobRouteScreen(
                     onClick = { stage = TripStage.IN_TRANSIT }
                 )
                 TripStage.IN_TRANSIT -> KilivanaButton(
-                    text = "Mark as Delivered",
+                    text = "Confirm Delivery (OTP)",
                     onClick = {
-                        stage = TripStage.DELIVERED
-                        onDeliveryComplete()
+                        otpError = null
+                        showOtpDialog = true
                     }
                 )
                 TripStage.DELIVERED -> Unit
             }
         }
     }
+
+    if (showOtpDialog) {
+        OtpDialog(
+            jobId = job.id,
+            error = otpError,
+            onConfirm = { entered ->
+                if (entered == job.deliveryOtp) {
+                    showOtpDialog = false
+                    otpError = null
+                    stage = TripStage.DELIVERED
+                    onDeliveryComplete()
+                } else {
+                    otpError = "That code doesn't match. Ask the buyer to double-check it."
+                }
+            },
+            onDismiss = {
+                showOtpDialog = false
+                otpError = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun OtpDialog(
+    jobId: String,
+    error: String?,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var code by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Confirm delivery") },
+        text = {
+            Column {
+                Text(
+                    text = "Ask the buyer for their delivery code and enter it to confirm $jobId was delivered.",
+                    color = KilivanaTextMuted,
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) code = it },
+                    label = { Text("Delivery code") },
+                    singleLine = true,
+                    isError = error != null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(text = error, color = KilivanaNotificationRed, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(code) }) {
+                Text("Confirm", color = KilivanaGreen, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = KilivanaTextMuted) }
+        }
+    )
 }
 
 @Composable
@@ -445,7 +566,6 @@ private fun labeledMarkerDrawable(context: Context, label: String, markerColor: 
     val canvas = Canvas(bitmap)
     val centerX = totalWidth / 2f
 
-    // Bubble
     val bubbleRect = RectF(
         centerX - bubbleWidth / 2f,
         0f,
@@ -456,7 +576,6 @@ private fun labeledMarkerDrawable(context: Context, label: String, markerColor: 
     canvas.drawRoundRect(bubbleRect, bubbleHeight / 2f, bubbleHeight / 2f, bubblePaint)
     canvas.drawText(label, centerX, bubbleHeight / 2f - (textPaint.ascent() + textPaint.descent()) / 2f, textPaint)
 
-    // Pin dot
     val pinCenterY = bubbleHeight + gap + pinRadius
     val pinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = markerColor }
     canvas.drawCircle(centerX, pinCenterY, pinRadius, pinPaint)

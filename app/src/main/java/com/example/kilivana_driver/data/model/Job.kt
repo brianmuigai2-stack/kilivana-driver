@@ -24,6 +24,7 @@ data class Job(
     val estimatedTime: String,
     val payoutKsh: Int,
     val customer: String,
+    val deliveryOtp: String,
     val status: JobStatus,
     val isNew: Boolean = false
 )
