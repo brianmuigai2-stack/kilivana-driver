@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Info
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -65,6 +67,7 @@ import androidx.core.content.ContextCompat
 import com.example.kilivana_driver.BuildConfig
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
+import com.example.kilivana_driver.ui.theme.KilivanaError
 import com.example.kilivana_driver.ui.theme.KilivanaGreen
 import com.example.kilivana_driver.ui.theme.KilivanaGreenTint
 import com.example.kilivana_driver.ui.theme.KilivanaNotificationRed
@@ -86,6 +89,7 @@ fun SettingsScreen(
     onPrivacyClick: () -> Unit,
     onAboutClick: () -> Unit,
     onSendTestNotification: () -> Unit,
+    onTestApiConnection: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -93,8 +97,6 @@ fun SettingsScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // Android 13+ requires runtime permission before notifications can be
-    // shown. We only turn the toggle on once that permission is granted.
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> onPushNotificationsChange(granted) }
@@ -162,6 +164,27 @@ fun SettingsScreen(
                 fontSize = 11.sp,
                 lineHeight = 15.sp
             )
+
+            if (BuildConfig.DEBUG) {
+                SectionLabel("Developer", topSpace = 24.dp)
+                SettingsCard {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        ApiTestRow(
+                            inProgress = uiState.apiTestInProgress,
+                            onClick = onTestApiConnection
+                        )
+                        uiState.apiTestResult?.let { result ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = result,
+                                color = if (uiState.apiTestSucceeded) KilivanaGreen else KilivanaError,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
 
             SectionLabel("App", topSpace = 24.dp)
             SettingsCard {
@@ -268,6 +291,41 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ApiTestRow(
+    inProgress: Boolean,
+    onClick: () -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RowIcon(Icons.Outlined.Cloud)
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(
+            text = "Backend connection",
+            modifier = Modifier.weight(1f),
+            color = KilivanaTextPrimary,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(KilivanaGreenTint)
+                .then(if (!inProgress) Modifier.clickable(onClick = onClick) else Modifier)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        ) {
+            if (inProgress) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    color = KilivanaGreen,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(text = "Test", color = KilivanaGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
@@ -524,6 +582,7 @@ private fun SettingsScreenPreview() {
             onPrivacyClick = {},
             onAboutClick = {},
             onSendTestNotification = {},
+            onTestApiConnection = {},
             onLogout = {}
         )
     }
