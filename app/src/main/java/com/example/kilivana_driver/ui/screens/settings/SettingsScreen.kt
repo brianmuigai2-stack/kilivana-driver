@@ -1,5 +1,10 @@
 package com.example.kilivana_driver.ui.screens.settings
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -29,6 +34,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -55,6 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.kilivana_driver.BuildConfig
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
@@ -63,7 +70,6 @@ import com.example.kilivana_driver.ui.theme.KilivanaGreenTint
 import com.example.kilivana_driver.ui.theme.KilivanaNotificationRed
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
-import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
@@ -79,20 +85,40 @@ fun SettingsScreen(
     onTermsClick: () -> Unit,
     onPrivacyClick: () -> Unit,
     onAboutClick: () -> Unit,
+    onSendTestNotification: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    // Android 13+ requires runtime permission before notifications can be
+    // shown. We only turn the toggle on once that permission is granted.
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> onPushNotificationsChange(granted) }
+
+    fun requestPushToggle(enable: Boolean) {
+        val needsRuntimePermission = enable &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        if (needsRuntimePermission) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            onPushNotificationsChange(enable)
+        }
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(KilivanaBackground)
             .verticalScroll(rememberScrollState())
+            .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        KilivanaStatusBarScrim()
         TopBar(title = "Settings", onBack = onBack)
 
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -103,7 +129,7 @@ fun SettingsScreen(
                     title = "Push Notifications",
                     subtitle = "New jobs and dispatch updates",
                     checked = uiState.pushNotificationsEnabled,
-                    onCheckedChange = onPushNotificationsChange
+                    onCheckedChange = ::requestPushToggle
                 )
                 RowDivider()
                 SwitchRow(
@@ -120,7 +146,22 @@ fun SettingsScreen(
                     checked = uiState.darkModeEnabled,
                     onCheckedChange = onDarkModeChange
                 )
+                RowDivider()
+                ActionRow(
+                    icon = Icons.Outlined.Send,
+                    title = "Send test notification",
+                    actionLabel = "Send",
+                    enabled = uiState.pushNotificationsEnabled,
+                    onClick = onSendTestNotification
+                )
             }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Sound changes apply to notifications sent after you change this. Your device's own settings can always override sound and vibration for this app.",
+                color = KilivanaTextMuted,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
 
             SectionLabel("App", topSpace = 24.dp)
             SettingsCard {
@@ -366,6 +407,46 @@ private fun NavRow(
 }
 
 @Composable
+private fun ActionRow(
+    icon: ImageVector,
+    title: String,
+    actionLabel: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RowIcon(icon)
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = if (enabled) KilivanaTextPrimary else KilivanaTextMuted,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(if (enabled) KilivanaGreenTint else KilivanaBorder.copy(alpha = 0.4f))
+                .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = actionLabel,
+                color = if (enabled) KilivanaGreen else KilivanaTextMuted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
 private fun RowIcon(icon: ImageVector) {
     Box(
         modifier = Modifier
@@ -442,6 +523,7 @@ private fun SettingsScreenPreview() {
             onTermsClick = {},
             onPrivacyClick = {},
             onAboutClick = {},
+            onSendTestNotification = {},
             onLogout = {}
         )
     }

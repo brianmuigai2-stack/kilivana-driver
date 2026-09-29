@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.example.kilivana_driver.notifications.NotificationHelper
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardViewModel
 import com.example.kilivana_driver.ui.screens.jobs.JobsViewModel
 import com.example.kilivana_driver.ui.screens.login.LoginScreen
@@ -36,19 +37,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setSystemBars(darkHeader = true)
+        NotificationHelper.ensureChannels(this)
+
         setContent {
-            KilivanaTheme {
+            val settingsState by settingsViewModel.uiState.collectAsState()
+
+            KilivanaTheme(darkTheme = settingsState.darkModeEnabled) {
                 var showSplash by rememberSaveable { mutableStateOf(true) }
                 val loginState by loginViewModel.uiState.collectAsState()
                 val dashboardState by dashboardViewModel.uiState.collectAsState()
                 val jobsState by jobsViewModel.uiState.collectAsState()
                 val driver by profileViewModel.driver.collectAsState()
-                val settingsState by settingsViewModel.uiState.collectAsState()
                 val notificationsState by notificationsViewModel.uiState.collectAsState()
 
-                // Splash and login are dark backgrounds (white icons); once
-                // logged in, MainScreen tells us when a map screen is showing
-                // so we can switch icon color to match.
                 LaunchedEffect(showSplash, loginState.isLoggedIn) {
                     if (showSplash || !loginState.isLoggedIn) {
                         setSystemBars(darkHeader = true)
@@ -74,6 +75,15 @@ class MainActivity : ComponentActivity() {
                         onNotificationClick = notificationsViewModel::markRead,
                         onMarkAllNotificationsRead = notificationsViewModel::markAllRead,
                         onLogout = loginViewModel::onLogout,
+                        onSendTestNotification = {
+                            NotificationHelper.postJobAlert(
+                                context = this@MainActivity,
+                                title = "New job available",
+                                message = "This is a test notification from Kilivana Driver.",
+                                pushEnabled = settingsState.pushNotificationsEnabled,
+                                soundEnabled = settingsState.notificationSoundEnabled
+                            )
+                        },
                         onSetStatusBarDark = { dark -> setSystemBars(darkHeader = dark) }
                     )
 

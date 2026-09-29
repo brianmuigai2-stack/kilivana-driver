@@ -52,6 +52,7 @@ fun MainScreen(
     onNotificationClick: (String) -> Unit,
     onMarkAllNotificationsRead: () -> Unit,
     onLogout: () -> Unit,
+    onSendTestNotification: () -> Unit,
     onSetStatusBarDark: (Boolean) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
@@ -116,6 +117,7 @@ fun MainScreen(
             onTermsClick = { /* TODO */ },
             onPrivacyClick = { /* TODO */ },
             onAboutClick = { /* TODO */ },
+            onSendTestNotification = onSendTestNotification,
             onLogout = onLogout
         )
 
