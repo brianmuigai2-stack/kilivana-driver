@@ -51,8 +51,9 @@ fun MainScreen(
     onLanguageSelected: (AppLanguage) -> Unit,
     onNotificationClick: (String) -> Unit,
     onMarkAllNotificationsRead: () -> Unit,
-    onLogout: () -> Unit,
     onSendTestNotification: () -> Unit,
+    onTestApiConnection: () -> Unit,
+    onLogout: () -> Unit,
     onSetStatusBarDark: (Boolean) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
@@ -68,10 +69,6 @@ fun MainScreen(
 
     val selectedJob = selectedJobId?.let { id -> jobsState.jobs.firstOrNull { it.id == id } }
     val activeTripJob = activeTripJobId?.let { id -> jobsState.jobs.firstOrNull { it.id == id } }
-
-    // The job currently accepted but not yet delivered — used to show the
-    // "active delivery" banner on the Map tab if the driver wanders off
-    // from the En Route screen without finishing.
     val acceptedJob = jobsState.jobs.firstOrNull { it.status == JobStatus.ACCEPTED }
 
     val closeHistory: () -> Unit = {
@@ -90,8 +87,6 @@ fun MainScreen(
             selectedJob == null && activeTripJob == null
     ) { closeHistory() }
 
-    // Any screen with a map on it (Map tab or En Route) keeps the default
-    // dark status bar icons; every other screen gets white icons over green.
     val isMapLikeVisible = (selectedTab == BottomTab.MAP || activeTripJob != null) &&
         !showSettings && !showNotifications && selectedJob == null
     LaunchedEffect(isMapLikeVisible) { onSetStatusBarDark(!isMapLikeVisible) }
@@ -118,6 +113,7 @@ fun MainScreen(
             onPrivacyClick = { /* TODO */ },
             onAboutClick = { /* TODO */ },
             onSendTestNotification = onSendTestNotification,
+            onTestApiConnection = onTestApiConnection,
             onLogout = onLogout
         )
 
