@@ -23,16 +23,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.LocalShipping
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -47,13 +51,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.kilivana_driver.data.model.Driver
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
+import com.example.kilivana_driver.ui.theme.KilivanaErrorTint
 import com.example.kilivana_driver.ui.theme.KilivanaGreen
 import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
 import com.example.kilivana_driver.ui.theme.KilivanaGreenTint
@@ -67,6 +74,9 @@ import java.util.Locale
 @Composable
 fun ProfileScreen(
     driver: Driver,
+    uiState: ProfileUiState = ProfileUiState(),
+    onPickImage: () -> Unit = {},
+    onDismissUploadMessage: () -> Unit = {},
     onBack: (() -> Unit)? = null,
     onSettingsClick: () -> Unit = {},
     onPersonalInfoClick: () -> Unit = {},
@@ -91,11 +101,55 @@ fun ProfileScreen(
         // status bar, and only the icons/text inside it are pushed down.
         ProfileHeader(
             driver = driver,
+            primaryImageUrl = uiState.primaryImage?.url,
+            uploading = uiState.isUploading,
+            onPickImage = onPickImage,
             onBack = onBack,
             onSettingsClick = onSettingsClick
         )
 
         Column(modifier = Modifier.padding(16.dp)) {
+            SettingsCard {
+                SettingsRow(
+                    icon = Icons.Outlined.PhotoCamera,
+                    title = "Profile Photo",
+                    subtitle = when {
+                        uiState.isUploading -> "Uploading…"
+                        uiState.primaryImage != null -> "Tap to change your photo"
+                        else -> "Add a photo so dispatch can identify you"
+                    },
+                    trailing = {
+                        when {
+                            uiState.isUploading -> CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = KilivanaGreen
+                            )
+
+                            else -> Icon(
+                                imageVector = Icons.Outlined.ChevronRight,
+                                contentDescription = null,
+                                tint = KilivanaTextMuted,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    onClick = { if (!uiState.isUploading) onPickImage() }
+                )
+            }
+
+            val uploadMessage = uiState.uploadError ?: uiState.uploadSuccessMessage
+            if (uploadMessage != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                UploadBanner(
+                    message = uploadMessage,
+                    isError = uiState.uploadError != null,
+                    onDismiss = onDismissUploadMessage
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             SettingsCard {
                 SettingsRow(
                     icon = Icons.Outlined.Person,
@@ -198,6 +252,9 @@ fun ProfileScreen(
 @Composable
 private fun ProfileHeader(
     driver: Driver,
+    primaryImageUrl: String?,
+    uploading: Boolean,
+    onPickImage: () -> Unit,
     onBack: (() -> Unit)?,
     onSettingsClick: () -> Unit
 ) {
@@ -265,21 +322,48 @@ private fun ProfileHeader(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // TODO: load the driver's real photo from the API (Coil); initials for now
+            // Tap the avatar to add or change the photo. Falls back to the
+            // driver's initials until the backend actually returns an image.
             Box(
                 modifier = Modifier
                     .size(80.dp)
                     .clip(CircleShape)
-                    .background(KilivanaWhite.copy(alpha = 0.2f)),
+                    .background(KilivanaWhite.copy(alpha = 0.2f))
+                    .clickable(enabled = !uploading, onClick = onPickImage),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = driver.name.split(" ").mapNotNull { it.firstOrNull() }.take(2)
-                        .joinToString("").uppercase(),
-                    color = KilivanaWhite,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                if (primaryImageUrl.isNullOrBlank()) {
+                    Text(
+                        text = driver.name.split(" ").mapNotNull { it.firstOrNull() }.take(2)
+                            .joinToString("").uppercase(),
+                        color = KilivanaWhite,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    AsyncImage(
+                        model = primaryImageUrl,
+                        contentDescription = "Profile photo",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
+                if (uploading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = KilivanaWhite
+                        )
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(
@@ -346,6 +430,7 @@ private fun SettingsRow(
     icon: ImageVector,
     title: String,
     subtitle: String? = null,
+    trailing: @Composable (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -386,11 +471,51 @@ private fun SettingsRow(
                 )
             }
         }
-        Icon(
+        trailing?.invoke() ?: Icon(
             imageVector = Icons.Outlined.ChevronRight,
             contentDescription = null,
             tint = KilivanaTextMuted,
             modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun UploadBanner(
+    message: String,
+    isError: Boolean,
+    onDismiss: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isError) KilivanaErrorTint else KilivanaGreenTint)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = if (isError) Icons.Outlined.ErrorOutline else Icons.Outlined.CheckCircle,
+            contentDescription = null,
+            tint = if (isError) KilivanaNotificationRed else KilivanaGreen,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = message,
+            color = if (isError) KilivanaNotificationRed else KilivanaGreen,
+            fontSize = 14.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = "Dismiss",
+            color = if (isError) KilivanaNotificationRed else KilivanaGreen,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onDismiss)
+                .padding(horizontal = 6.dp, vertical = 2.dp)
         )
     }
 }

@@ -1,11 +1,15 @@
 package com.example.kilivana_driver.ui.screens.profile
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.ContentResolver
+import android.net.Uri
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.Driver
 import com.example.kilivana_driver.data.model.DriverImage
 import com.example.kilivana_driver.data.network.ProfileRepository
 import com.example.kilivana_driver.data.network.SessionStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,19 +18,26 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Locale
 
 data class ProfileUiState(
     val images: List<DriverImage> = emptyList(),
     val imagesLoading: Boolean = false,
-    val imagesError: String? = null
+    val imagesError: String? = null,
+    val isUploading: Boolean = false,
+    val uploadError: String? = null,
+    val uploadSuccessMessage: String? = null
 ) {
     /** The image the header avatar should show, or null to fall back to initials. */
     val primaryImage: DriverImage?
         get() = images.firstOrNull { it.isPrimary } ?: images.minByOrNull { it.sortOrder }
 }
 
-class ProfileViewModel : ViewModel() {
+class ProfileViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val contentResolver: ContentResolver get() = getApplication<Application>().contentResolver
 
     private val profileRepository = ProfileRepository()
 
@@ -73,6 +84,62 @@ class ProfileViewModel : ViewModel() {
                 }
             }
         }
+    }
+
+    /**
+     * Uploads the picture the driver picked, then reloads the list so the new
+     * image comes straight from the server rather than being faked into local
+     * state — this way what you see is what the backend actually stored.
+     */
+    fun uploadImage(uri: Uri) {
+        if (_uiState.value.isUploading) return
+        val userId = SessionStore.userId
+        if (userId == null) {
+            _uiState.update { it.copy(uploadError = "Please log in before uploading a photo") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(isUploading = true, uploadError = null, uploadSuccessMessage = null)
+            }
+
+            val file = withContext(Dispatchers.IO) {
+                runCatching {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        val temp = File.createTempFile("profile_upload_", ".jpg")
+                        temp.outputStream().use { out -> stream.copyTo(out) }
+                        temp
+                    }
+                }.getOrNull()
+            }
+            if (file == null) {
+                _uiState.update {
+                    it.copy(isUploading = false, uploadError = "Couldn't read that image")
+                }
+                return@launch
+            }
+
+            val result = profileRepository.uploadDriverImage(
+                userId = userId,
+                file = file,
+                isPrimary = _uiState.value.images.isEmpty()
+            )
+            file.delete()
+
+            _uiState.update {
+                it.copy(
+                    isUploading = false,
+                    uploadError = result.exceptionOrNull()?.message,
+                    uploadSuccessMessage = if (result.isSuccess) "Photo uploaded" else null
+                )
+            }
+            if (result.isSuccess) loadImages()
+        }
+    }
+
+    fun dismissUploadMessage() {
+        _uiState.update { it.copy(uploadError = null, uploadSuccessMessage = null) }
     }
 
     fun loadImages() {

@@ -5,6 +5,9 @@ import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.AuthUser
 import com.example.kilivana_driver.data.model.LoginRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
@@ -17,15 +20,60 @@ import retrofit2.HttpException
  * HTTP status. A failed login is a normal outcome here, not an exception.
  */
 class AuthRepository(
-    private val api: AuthApi = ApiClient.create()
+    private val api: AuthApi = ApiClient.create(),
+    private val preferences: SessionPreferences? = null
 ) {
     private val errorJson = Json { ignoreUnknownKeys = true }
+
+    /** True once a remembered session has been read back off disk at startup. */
+    private val _restoreComplete = MutableStateFlow(false)
+    val restoreComplete: StateFlow<Boolean> = _restoreComplete.asStateFlow()
+
+    /**
+     * Re-signs the driver in from the stored session when they asked to be
+     * remembered. Verifies the session is still valid against `me` so a stale
+     * or revoked token sends them to the login screen rather than into a
+     * half-broken app. Falls back to the cached user if `me` is unreachable,
+     * so a flaky tunnel doesn't sign them out.
+     */
+    suspend fun restoreSession(): Boolean {
+        val prefs = preferences ?: run {
+            _restoreComplete.value = true
+            return false
+        }
+        val restored = prefs.restore()
+        if (restored == null) {
+            _restoreComplete.value = true
+            return false
+        }
+
+        SessionStore.save(restored.user, restored.accessToken, null)
+        val verified = runCatching { me(restored.user.id) }.getOrNull()
+        if (verified?.isFailure == true) {
+            // Only drop the session if the server actively rejected it.
+            val status = verified.exceptionOrNull()?.message.orEmpty()
+            if (status.contains("UNAUTHORIZED", ignoreCase = true) ||
+                status.contains("Authentication is required", ignoreCase = true)
+            ) {
+                SessionStore.clear()
+                prefs.clear()
+                _restoreComplete.value = true
+                return false
+            }
+        }
+        _restoreComplete.value = true
+        return true
+    }
 
     /**
      * On success the user and tokens are saved to [SessionStore], so every
      * later endpoint can read the id without being handed it again.
      */
-    suspend fun login(email: String, password: String): Result<AuthUser> =
+    suspend fun login(
+        email: String,
+        password: String,
+        rememberMe: Boolean = false
+    ): Result<AuthUser> =
         withContext(Dispatchers.IO) {
             try {
                 val response = api.login(LoginRequest(email = email.trim(), password = password))
@@ -33,6 +81,11 @@ class AuthRepository(
                 when {
                     response.success && data != null && data.accessToken.isNotBlank() -> {
                         SessionStore.save(data.user, data.accessToken, data.refreshToken)
+                        if (rememberMe) {
+                            preferences?.save(data.user, data.accessToken, data.refreshToken)
+                        } else {
+                            preferences?.clear()
+                        }
                         Result.success(data.user)
                     }
 
@@ -78,6 +131,7 @@ class AuthRepository(
                 null
             }
             SessionStore.clear()
+            preferences?.clear()
             if (result?.isFailure == true) Result.failure(result.exceptionOrNull()!!)
             else Result.success(Unit)
         }

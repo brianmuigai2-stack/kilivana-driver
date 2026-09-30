@@ -30,6 +30,7 @@ import com.example.kilivana_driver.ui.screens.map.MapScreen
 import com.example.kilivana_driver.ui.screens.notifications.NotificationsScreen
 import com.example.kilivana_driver.ui.screens.notifications.NotificationsUiState
 import com.example.kilivana_driver.ui.screens.profile.ProfileScreen
+import com.example.kilivana_driver.ui.screens.profile.ProfileUiState
 import com.example.kilivana_driver.ui.screens.settings.AppLanguage
 import com.example.kilivana_driver.ui.screens.settings.SettingsScreen
 import com.example.kilivana_driver.ui.screens.settings.SettingsUiState
@@ -54,6 +55,9 @@ fun MainScreen(
     onSendTestNotification: () -> Unit,
     onTestApiConnection: () -> Unit,
     onLogout: () -> Unit,
+    profileUiState: ProfileUiState = ProfileUiState(),
+    onPickImage: () -> Unit = {},
+    onDismissUploadMessage: () -> Unit = {},
     onSetStatusBarDark: (Boolean) -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
@@ -195,6 +199,9 @@ fun MainScreen(
                         )
                         BottomTab.MORE -> ProfileScreen(
                             driver = driver,
+                            uiState = profileUiState,
+                            onPickImage = onPickImage,
+                            onDismissUploadMessage = onDismissUploadMessage,
                             onSettingsClick = { showSettings = true },
                             onPersonalInfoClick = { /* TODO */ },
                             onVehicleDetailsClick = { /* TODO */ },

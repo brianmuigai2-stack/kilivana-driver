@@ -4,8 +4,11 @@ import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -45,13 +48,22 @@ class MainActivity : ComponentActivity() {
             KilivanaTheme(darkTheme = settingsState.darkModeEnabled) {
                 var showSplash by rememberSaveable { mutableStateOf(true) }
                 val loginState by loginViewModel.uiState.collectAsState()
+                val isSignedIn by loginViewModel.isSignedIn.collectAsState()
+                val restoreComplete by loginViewModel.restoreComplete.collectAsState()
                 val dashboardState by dashboardViewModel.uiState.collectAsState()
                 val jobsState by jobsViewModel.uiState.collectAsState()
                 val driver by profileViewModel.driver.collectAsState()
+                val profileState by profileViewModel.uiState.collectAsState()
                 val notificationsState by notificationsViewModel.uiState.collectAsState()
 
-                LaunchedEffect(showSplash, loginState.isLoggedIn) {
-                    if (showSplash || !loginState.isLoggedIn) {
+                val pickImage = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.PickVisualMedia()
+                ) { uri ->
+                    if (uri != null) profileViewModel.uploadImage(uri)
+                }
+
+                LaunchedEffect(showSplash, isSignedIn) {
+                    if (showSplash || !isSignedIn) {
                         setSystemBars(darkHeader = true)
                     }
                 }
@@ -59,7 +71,7 @@ class MainActivity : ComponentActivity() {
                 when {
                     showSplash -> SplashScreen(onFinished = { showSplash = false })
 
-                    loginState.isLoggedIn -> MainScreen(
+                    isSignedIn -> MainScreen(
                         dashboardState = dashboardState,
                         jobsState = jobsState,
                         driver = driver,
@@ -85,8 +97,19 @@ class MainActivity : ComponentActivity() {
                         },
                         onTestApiConnection = settingsViewModel::testApiConnection,
                         onLogout = loginViewModel::onLogout,
+                        profileUiState = profileState,
+                        onPickImage = {
+                            pickImage.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        onDismissUploadMessage = profileViewModel::dismissUploadMessage,
                         onSetStatusBarDark = { dark -> setSystemBars(darkHeader = dark) }
                     )
+
+                    // Hold the splash until the remembered-session check finishes,
+                    // otherwise a returning driver sees a flash of the login screen.
+                    !restoreComplete -> SplashScreen(onFinished = { showSplash = false })
 
                     else -> LoginScreen(
                         uiState = loginState,
