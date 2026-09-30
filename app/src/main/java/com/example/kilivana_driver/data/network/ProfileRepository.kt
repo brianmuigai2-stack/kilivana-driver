@@ -6,7 +6,11 @@ import com.example.kilivana_driver.data.model.DriverImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import retrofit2.HttpException
+import java.io.File
 
 /**
  * Fetches the images attached to a driver's profile.
@@ -41,6 +45,49 @@ class ProfileRepository(
                 Result.failure(e)
             }
         }
+
+    /**
+     * Uploads one image from a local file, e.g. a photo the driver picked.
+     *
+     * The file is read into memory here, so this is fine for the handful of
+     * small images a driver profile holds, not for multi-megabyte camera files
+     * without streaming them first.
+     */
+    suspend fun uploadDriverImage(
+        userId: Long,
+        file: File,
+        isPrimary: Boolean? = null
+    ): Result<DriverImage> = withContext(Dispatchers.IO) {
+        try {
+            val mediaType = when (file.extension.lowercase()) {
+                "png" -> "image/png".toMediaTypeOrNull()
+                "jpg", "jpeg" -> "image/jpeg".toMediaTypeOrNull()
+                "webp" -> "image/webp".toMediaTypeOrNull()
+                else -> "image/*".toMediaTypeOrNull()
+            }
+            val part = MultipartBody.Part.createFormData(
+                name = "image",
+                filename = file.name,
+                body = file.asRequestBody(mediaType)
+            )
+            val response = api.uploadDriverImage(
+                userIdHeader = userId,
+                userIdPath = userId,
+                image = part,
+                isPrimary = isPrimary
+            )
+            val data = response.data
+            if (response.success && data != null) {
+                Result.success(data)
+            } else {
+                Result.failure(Exception(describe(response.error, response.message)))
+            }
+        } catch (e: HttpException) {
+            Result.failure(Exception(readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     /** Pulls `message` / `error.details` out of a failed response's body, if it has one. */
     private fun readErrorBody(e: HttpException): String? {

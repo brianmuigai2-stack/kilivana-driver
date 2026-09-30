@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.Visibility
@@ -71,7 +72,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaWhite
 @Composable
 fun LoginScreen(
     uiState: LoginUiState,
-    onPhoneChange: (String) -> Unit,
+    onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onTogglePasswordVisibility: () -> Unit,
     onRememberMeChange: (Boolean) -> Unit,
@@ -135,17 +136,17 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Phone number
-            FieldLabel("Phone Number")
+            // Email address
+            FieldLabel("Email Address")
             KilivanaTextField(
-                value = uiState.phoneNumber,
-                onValueChange = onPhoneChange,
-                placeholder = "+254 700 000000",
-                leadingIcon = Icons.Outlined.Phone,
+                value = uiState.email,
+                onValueChange = onEmailChange,
+                placeholder = "driver@example.com",
+                leadingIcon = Icons.Outlined.Email,
                 enabled = !uiState.isLoading,
                 isError = hasError,
                 keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Phone,
+                    keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next
                 ),
                 keyboardActions = KeyboardActions(
@@ -368,7 +369,7 @@ private fun LoginScreenPreview() {
     KilivanaTheme {
         LoginScreen(
             uiState = LoginUiState(),
-            onPhoneChange = {},
+            onEmailChange = {},
             onPasswordChange = {},
             onTogglePasswordVisibility = {},
             onRememberMeChange = {},

@@ -90,7 +90,7 @@ class MainActivity : ComponentActivity() {
 
                     else -> LoginScreen(
                         uiState = loginState,
-                        onPhoneChange = loginViewModel::onPhoneChange,
+                        onEmailChange = loginViewModel::onEmailChange,
                         onPasswordChange = loginViewModel::onPasswordChange,
                         onTogglePasswordVisibility = loginViewModel::onTogglePasswordVisibility,
                         onRememberMeChange = loginViewModel::onRememberMeChange,

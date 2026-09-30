@@ -5,11 +5,16 @@ import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.Driver
 import com.example.kilivana_driver.data.model.DriverImage
 import com.example.kilivana_driver.data.network.ProfileRepository
+import com.example.kilivana_driver.data.network.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 data class ProfileUiState(
     val images: List<DriverImage> = emptyList(),
@@ -23,34 +28,60 @@ data class ProfileUiState(
 
 class ProfileViewModel : ViewModel() {
 
-    // TODO: replace sample data with the logged-in driver from the API
-    private val _driver = MutableStateFlow(
-        Driver(
-            name = "James Mwangi",
-            driverId = "DRI-0042",
-            rating = 4.8,
-            deliveriesCompleted = 12,
-            vehiclePlate = "KDB 432A",
-            vehicleType = "Truck",
-            paymentMethod = "M-Pesa registered"
+    private val profileRepository = ProfileRepository()
+
+    /**
+     * The driver shown in the header, derived from whoever is signed in.
+     *
+     * [Driver.driverId] is the profile code the UI shows (e.g. "DRV-0042"),
+     * derived from the backend's numeric id since the API returns no such
+     * code yet. The rating/delivery counts still have no endpoint behind them
+     * and stay at their placeholder values until one exists.
+     */
+    val driver: StateFlow<Driver> = SessionStore.currentUser
+        .map { user ->
+            Driver(
+                name = user?.name.orEmpty(),
+                driverId = user?.let { "DRV-%04d".format(Locale.US, it.id) }.orEmpty(),
+                rating = 0.0,
+                deliveriesCompleted = 0,
+                vehiclePlate = "",
+                vehicleType = "",
+                paymentMethod = ""
+            )
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = Driver("", "", 0.0, 0, "", "", "")
         )
-    )
-    val driver: StateFlow<Driver> = _driver.asStateFlow()
 
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
-    private val profileRepository = ProfileRepository()
-
-    // TODO: source this from the login/session response instead of a constant
-    private val userId: Long = 42L
-
     init {
-        loadImages()
+        // This ViewModel is created at activity launch, which is *before* the
+        // driver has logged in, so an eager load in init would always see a
+        // null session. Watching the session means the images load as soon as
+        // a login actually populates it, and clear again on logout.
+        viewModelScope.launch {
+            SessionStore.currentUser.collect { user ->
+                if (user != null) {
+                    loadImages()
+                } else {
+                    _uiState.update { ProfileUiState() }
+                }
+            }
+        }
     }
 
     fun loadImages() {
         if (_uiState.value.imagesLoading) return
+        val userId = SessionStore.userId
+        if (userId == null) {
+            _uiState.update { it.copy(imagesLoading = false, imagesError = null) }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(imagesLoading = true, imagesError = null) }
             val result = profileRepository.getDriverImages(userId)

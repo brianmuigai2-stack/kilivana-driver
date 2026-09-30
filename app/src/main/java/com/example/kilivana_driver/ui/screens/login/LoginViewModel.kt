@@ -2,7 +2,8 @@ package com.example.kilivana_driver.ui.screens.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.delay
+import com.example.kilivana_driver.data.network.AuthRepository
+import com.example.kilivana_driver.data.network.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,7 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class LoginUiState(
-    val phoneNumber: String = "",
+    val email: String = "",
     val password: String = "",
     val passwordVisible: Boolean = false,
     val rememberMe: Boolean = false,
@@ -24,10 +25,10 @@ class LoginViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
-    fun onPhoneChange(value: String) {
-        // Only allow digits, "+" and spaces, capped in length
-        val cleaned = value.filter { it.isDigit() || it == '+' || it == ' ' }.take(16)
-        _uiState.update { it.copy(phoneNumber = cleaned, errorMessage = null) }
+    private val authRepository = AuthRepository()
+
+    fun onEmailChange(value: String) {
+        _uiState.update { it.copy(email = value.trim(), errorMessage = null) }
     }
 
     fun onPasswordChange(value: String) {
@@ -39,6 +40,7 @@ class LoginViewModel : ViewModel() {
     }
 
     fun onLogout() {
+        viewModelScope.launch { authRepository.logout(SessionStore.userId) }
         _uiState.update { LoginUiState() }
     }
 
@@ -51,10 +53,10 @@ class LoginViewModel : ViewModel() {
         val state = _uiState.value
         if (state.isLoading) return
 
-        val digitCount = state.phoneNumber.count { it.isDigit() }
         val validationError = when {
-            state.phoneNumber.isBlank() -> "Enter your phone number"
-            digitCount < 9 -> "Enter a valid phone number, e.g. +254 700 000000"
+            state.email.isBlank() -> "Enter your email address"
+            !state.email.contains("@") || !state.email.substringAfter("@").contains(".") ->
+                "Enter a valid email address"
             state.password.isBlank() -> "Enter your password"
             else -> null
         }
@@ -66,19 +68,24 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-            // TODO: replace this fake check with a real AuthRepository call
-            delay(1200)
-            val success = state.password.length >= 4
+            val result = authRepository.login(state.email, state.password)
 
             _uiState.update {
-                if (success) {
-                    it.copy(isLoading = false, isLoggedIn = true)
-                } else {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Incorrect phone number or password. Please try again."
-                    )
-                }
+                result.fold(
+                    onSuccess = { _ ->
+                        it.copy(
+                            isLoading = false,
+                            isLoggedIn = true,
+                            password = ""
+                        )
+                    },
+                    onFailure = { e ->
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = e.message ?: "Couldn't reach the backend"
+                        )
+                    }
+                )
             }
         }
     }
