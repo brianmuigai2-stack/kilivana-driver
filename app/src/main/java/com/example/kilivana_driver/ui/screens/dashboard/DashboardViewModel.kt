@@ -65,7 +65,7 @@ internal fun sampleDashboardState() = DashboardUiState(
     // Name/id are overridden per signed-in user by the ViewModel; the rest is
     // still placeholder until the jobs endpoints exist.
     driverName = "",
-    driverId = "DRI-0042",
+    driverId = "",
     deliveriesAssigned = 2,
     estimatedTransit = "4h 15m",
     hasUnreadNotifications = true,

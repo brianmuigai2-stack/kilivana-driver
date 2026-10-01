@@ -29,8 +29,12 @@ import com.example.kilivana_driver.ui.screens.jobs.JobsUiState
 import com.example.kilivana_driver.ui.screens.map.MapScreen
 import com.example.kilivana_driver.ui.screens.notifications.NotificationsScreen
 import com.example.kilivana_driver.ui.screens.notifications.NotificationsUiState
+import com.example.kilivana_driver.data.model.AuthUser
+import com.example.kilivana_driver.ui.screens.profile.PersonalInfoScreen
+import com.example.kilivana_driver.ui.screens.profile.ProfileImagesScreen
 import com.example.kilivana_driver.ui.screens.profile.ProfileScreen
 import com.example.kilivana_driver.ui.screens.profile.ProfileUiState
+import com.example.kilivana_driver.ui.screens.profile.VehicleDetailsScreen
 import com.example.kilivana_driver.ui.screens.settings.AppLanguage
 import com.example.kilivana_driver.ui.screens.settings.SettingsScreen
 import com.example.kilivana_driver.ui.screens.settings.SettingsUiState
@@ -56,7 +60,9 @@ fun MainScreen(
     onTestApiConnection: () -> Unit,
     onLogout: () -> Unit,
     profileUiState: ProfileUiState = ProfileUiState(),
+    currentUser: AuthUser? = null,
     onPickImage: () -> Unit = {},
+    onDeleteImage: (Long) -> Unit = {},
     onDismissUploadMessage: () -> Unit = {},
     onSetStatusBarDark: (Boolean) -> Unit = {}
 ) {
@@ -66,6 +72,9 @@ fun MainScreen(
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showNotifications by rememberSaveable { mutableStateOf(false) }
     var showHistory by rememberSaveable { mutableStateOf(false) }
+    var showPersonalInfo by rememberSaveable { mutableStateOf(false) }
+    var showVehicleDetails by rememberSaveable { mutableStateOf(false) }
+    var showProfileImages by rememberSaveable { mutableStateOf(false) }
     var tabBeforeHistory by rememberSaveable { mutableStateOf(BottomTab.HOME) }
 
     // TODO: replace with real delivery history from a ViewModel / the API
@@ -91,11 +100,40 @@ fun MainScreen(
             selectedJob == null && activeTripJob == null
     ) { closeHistory() }
 
+    BackHandler(enabled = showProfileImages) { showProfileImages = false }
+    BackHandler(enabled = showVehicleDetails && !showProfileImages) { showVehicleDetails = false }
+    BackHandler(enabled = showPersonalInfo && !showVehicleDetails && !showProfileImages) {
+        showPersonalInfo = false
+    }
+
     val isMapLikeVisible = (selectedTab == BottomTab.MAP || activeTripJob != null) &&
         !showSettings && !showNotifications && selectedJob == null
     LaunchedEffect(isMapLikeVisible) { onSetStatusBarDark(!isMapLikeVisible) }
 
     when {
+        showProfileImages -> ProfileImagesScreen(
+            images = profileUiState.images,
+            isLoading = profileUiState.isLoading,
+            isUploading = profileUiState.isUploading,
+            isDeleting = profileUiState.isDeletingImage,
+            onPickImage = onPickImage,
+            onDeleteImage = { onDeleteImage(it.id) },
+            onBack = { showProfileImages = false }
+        )
+
+        showVehicleDetails -> VehicleDetailsScreen(
+            profile = profileUiState.profile,
+            isLoading = profileUiState.isLoading,
+            needsProfile = profileUiState.needsProfile,
+            onBack = { showVehicleDetails = false },
+            onManageImagesClick = { showProfileImages = true }
+        )
+
+        showPersonalInfo -> PersonalInfoScreen(
+            user = currentUser,
+            onBack = { showPersonalInfo = false }
+        )
+
         activeTripJob != null -> JobRouteScreen(
             job = activeTripJob,
             onBack = { activeTripJobId = null },
@@ -203,8 +241,8 @@ fun MainScreen(
                             onPickImage = onPickImage,
                             onDismissUploadMessage = onDismissUploadMessage,
                             onSettingsClick = { showSettings = true },
-                            onPersonalInfoClick = { /* TODO */ },
-                            onVehicleDetailsClick = { /* TODO */ },
+                            onPersonalInfoClick = { showPersonalInfo = true },
+                            onVehicleDetailsClick = { showVehicleDetails = true },
                             onBankDetailsClick = { /* TODO */ },
                             onChangePasswordClick = { /* TODO */ },
                             onNotificationsClick = { showNotifications = true },

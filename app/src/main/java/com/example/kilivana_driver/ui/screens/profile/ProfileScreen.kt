@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.LocalShipping
@@ -58,6 +59,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.kilivana_driver.data.model.Driver
+import com.example.kilivana_driver.ui.theme.KilivanaAmber
+import com.example.kilivana_driver.ui.theme.KilivanaAmberTint
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
 import com.example.kilivana_driver.ui.theme.KilivanaErrorTint
@@ -138,14 +141,19 @@ fun ProfileScreen(
                 )
             }
 
-            val uploadMessage = uiState.uploadError ?: uiState.uploadSuccessMessage
-            if (uploadMessage != null) {
+            val message = uiState.errorMessage ?: uiState.successMessage
+            if (message != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 UploadBanner(
-                    message = uploadMessage,
-                    isError = uiState.uploadError != null,
+                    message = message,
+                    isError = uiState.errorMessage != null,
                     onDismiss = onDismissUploadMessage
                 )
+            }
+
+            if (uiState.needsProfile) {
+                Spacer(modifier = Modifier.height(12.dp))
+                MissingProfileNotice()
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -160,7 +168,15 @@ fun ProfileScreen(
                 SettingsRow(
                     icon = Icons.Outlined.LocalShipping,
                     title = "Vehicle Details",
-                    subtitle = "${driver.vehiclePlate} • ${driver.vehicleType}",
+                    subtitle = when {
+                        uiState.profile == null -> "Not set up yet"
+                        uiState.profile?.licenseNumber.isNullOrBlank() &&
+                            uiState.profile?.vehicleNumber.isNullOrBlank() -> "No details saved"
+                        else -> listOfNotNull(
+                            uiState.profile?.vehicleNumber?.takeIf { it.isNotBlank() },
+                            uiState.profile?.vehicleType?.takeIf { it.isNotBlank() }
+                        ).joinToString(" • ")
+                    },
                     onClick = onVehicleDetailsClick
                 )
                 RowDivider()
@@ -476,6 +492,33 @@ private fun SettingsRow(
             contentDescription = null,
             tint = KilivanaTextMuted,
             modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun MissingProfileNotice() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(KilivanaAmberTint)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Info,
+            contentDescription = null,
+            tint = KilivanaAmber,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = "Your licence and vehicle details are set up by your Kilivana admin. " +
+                "You can add photos of them here, but the details themselves are filled in " +
+                "for you — ask your admin if something is missing.",
+            color = KilivanaAmber,
+            fontSize = 14.sp
         )
     }
 }

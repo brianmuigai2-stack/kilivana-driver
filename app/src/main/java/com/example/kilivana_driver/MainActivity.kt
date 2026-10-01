@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.example.kilivana_driver.data.network.SessionStore
 import com.example.kilivana_driver.notifications.NotificationHelper
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardViewModel
 import com.example.kilivana_driver.ui.screens.jobs.JobsViewModel
@@ -37,6 +38,9 @@ class MainActivity : ComponentActivity() {
     private val settingsViewModel: SettingsViewModel by viewModels()
     private val notificationsViewModel: NotificationsViewModel by viewModels()
 
+    /** The signed-in user, so the personal info screen renders live API data. */
+    private val sessionStoreUser = SessionStore.currentUser
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setSystemBars(darkHeader = true)
@@ -54,6 +58,7 @@ class MainActivity : ComponentActivity() {
                 val jobsState by jobsViewModel.uiState.collectAsState()
                 val driver by profileViewModel.driver.collectAsState()
                 val profileState by profileViewModel.uiState.collectAsState()
+                val currentUser by sessionStoreUser.collectAsState()
                 val notificationsState by notificationsViewModel.uiState.collectAsState()
 
                 val pickImage = rememberLauncherForActivityResult(
@@ -98,12 +103,14 @@ class MainActivity : ComponentActivity() {
                         onTestApiConnection = settingsViewModel::testApiConnection,
                         onLogout = loginViewModel::onLogout,
                         profileUiState = profileState,
+                        currentUser = currentUser,
                         onPickImage = {
                             pickImage.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                             )
                         },
-                        onDismissUploadMessage = profileViewModel::dismissUploadMessage,
+                        onDeleteImage = profileViewModel::deleteImage,
+                        onDismissUploadMessage = profileViewModel::dismissMessage,
                         onSetStatusBarDark = { dark -> setSystemBars(darkHeader = dark) }
                     )
 
