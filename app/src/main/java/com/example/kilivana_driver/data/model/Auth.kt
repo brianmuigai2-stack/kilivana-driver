@@ -8,6 +8,11 @@ import kotlinx.serialization.Serializable
  * plain strings rather than enums on purpose: the Swagger docs only show one
  * example each (FARMER / ACTIVE / PENDING), and a sealed enum would throw on
  * any value the backend adds later instead of just carrying it through.
+ *
+ * [username], [referenceCode] and [region] are set by an admin when they
+ * register the driver, and come back null until they do — the admin form
+ * collects all three. They are nullable rather than defaulted strings so
+ * "never filled in" stays distinguishable from "filled in with a blank".
  */
 @Serializable
 data class AuthUser(
@@ -15,6 +20,9 @@ data class AuthUser(
     val name: String = "",
     val email: String = "",
     val phone: String = "",
+    val username: String? = null,
+    val referenceCode: String? = null,
+    val region: String? = null,
     val role: String = "",
     val status: String = "",
     val verificationStatus: String = "",

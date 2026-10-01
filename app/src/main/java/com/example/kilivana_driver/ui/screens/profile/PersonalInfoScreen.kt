@@ -66,6 +66,8 @@ fun PersonalInfoScreen(
                 InfoDivider()
                 InfoRow("Phone", user?.phone)
                 InfoDivider()
+                InfoRow("Region", user?.region)
+                InfoDivider()
                 InfoRow("Role", user?.role?.replaceFirstChar { it.uppercase() })
                 InfoDivider()
                 InfoRow("Account status", user?.status?.replaceFirstChar { it.uppercase() })
