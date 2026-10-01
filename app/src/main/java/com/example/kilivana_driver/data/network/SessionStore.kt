@@ -21,6 +21,9 @@ object SessionStore {
     private val _accessToken = MutableStateFlow<String?>(null)
     val accessToken: StateFlow<String?> = _accessToken.asStateFlow()
 
+    private val _refreshToken = MutableStateFlow<String?>(null)
+    val refreshToken: StateFlow<String?> = _refreshToken.asStateFlow()
+
     /**
      * The id every X-User-Id endpoint needs. Null until a login succeeds, so
      * callers must handle the signed-out case rather than sending 0.
@@ -31,14 +34,21 @@ object SessionStore {
     fun save(user: AuthUser, accessToken: String?, refreshToken: String?) {
         _currentUser.value = user
         _accessToken.value = accessToken
-        _refreshToken = refreshToken
+        _refreshToken.value = refreshToken
     }
 
-    private var _refreshToken: String? = null
+    /**
+     * Swaps in a new token pair after a refresh, without touching the cached
+     * user. Kept separate from [save] so a refresh can't blank the user out.
+     */
+    fun updateTokens(accessToken: String, refreshToken: String) {
+        _accessToken.value = accessToken
+        _refreshToken.value = refreshToken
+    }
 
     fun clear() {
         _currentUser.value = null
         _accessToken.value = null
-        _refreshToken = null
+        _refreshToken.value = null
     }
 }

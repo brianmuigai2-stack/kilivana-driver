@@ -31,10 +31,8 @@ class AuthRepository(
 
     /**
      * Re-signs the driver in from the stored session when they asked to be
-     * remembered. Verifies the session is still valid against `me` so a stale
-     * or revoked token sends them to the login screen rather than into a
-     * half-broken app. Falls back to the cached user if `me` is unreachable,
-     * so a flaky tunnel doesn't sign them out.
+     * remembered, recovering the user from `/auth/me` rather than trusting the
+     * cached copy, so a revoked or expired session is caught at startup.
      */
     suspend fun restoreSession(): Boolean {
         val prefs = preferences ?: run {
@@ -47,20 +45,27 @@ class AuthRepository(
             return false
         }
 
-        SessionStore.save(restored.user, restored.accessToken, null)
-        val verified = runCatching { me(restored.user.id) }.getOrNull()
-        if (verified?.isFailure == true) {
-            // Only drop the session if the server actively rejected it.
-            val status = verified.exceptionOrNull()?.message.orEmpty()
-            if (status.contains("UNAUTHORIZED", ignoreCase = true) ||
-                status.contains("Authentication is required", ignoreCase = true)
-            ) {
-                SessionStore.clear()
-                prefs.clear()
-                _restoreComplete.value = true
-                return false
-            }
+        // Seed the token first so the /auth/me call is authenticated.
+        val access = prefs.accessToken()
+        val refresh = prefs.refreshToken()
+        if (access.isNullOrBlank()) {
+            prefs.clear()
+            _restoreComplete.value = true
+            return false
         }
+        SessionStore.save(restored.user, access, refresh)
+
+        val me = me()
+        if (me.isFailure) {
+            // /auth/me is authoritative: if the token is no longer good, the
+            // driver must log in again rather than half-work.
+            SessionStore.clear()
+            prefs.clear()
+            _restoreComplete.value = true
+            return false
+        }
+
+        me.getOrNull()?.let { SessionStore.save(it, SessionStore.accessToken.value, refresh) }
         _restoreComplete.value = true
         return true
     }
@@ -102,11 +107,11 @@ class AuthRepository(
             }
         }
 
-    /** Confirms the session is still valid and refreshes the cached user. */
-    suspend fun me(userId: Long): Result<AuthUser> =
+    /** Recovers the signed-in user from the bearer token. */
+    suspend fun me(): Result<AuthUser> =
         withContext(Dispatchers.IO) {
             try {
-                val response = api.me(userId)
+                val response = api.me()
                 if (response.success && response.data != null) {
                     Result.success(response.data)
                 } else {
@@ -123,16 +128,12 @@ class AuthRepository(
      * Best-effort sign-out. Never fails the caller: whether or not the server
      * hears about it, the local session is cleared either way.
      */
-    suspend fun logout(userId: Long?): Result<Unit> =
+    suspend fun logout(): Result<Unit> =
         withContext(Dispatchers.IO) {
-            val result = if (userId != null) {
-                runCatching { api.logout(userId) }
-            } else {
-                null
-            }
+            val result = runCatching { api.logout() }
             SessionStore.clear()
             preferences?.clear()
-            if (result?.isFailure == true) Result.failure(result.exceptionOrNull()!!)
+            if (result.isFailure) Result.failure(result.exceptionOrNull()!!)
             else Result.success(Unit)
         }
 

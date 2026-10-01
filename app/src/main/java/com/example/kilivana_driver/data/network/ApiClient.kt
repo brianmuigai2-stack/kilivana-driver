@@ -40,11 +40,32 @@ object ApiClient {
         chain.proceed(request)
     }
 
+    /**
+     * Injected once the Application context exists, because secure token
+     * storage needs it. [install] is called from the Application class.
+     */
+    @Volatile
+    private var sessionPreferences: SessionPreferences? = null
+
+    fun install(preferences: SessionPreferences) {
+        sessionPreferences = preferences
+    }
+
     val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .addInterceptor(ngrokHeaderInterceptor)
+            // Bearer token must be added after the ngrok header, and applies to
+            // every protected call regardless of whether a token exists yet.
+            .addInterceptor(AuthInterceptor())
             .apply {
-                // Full request/response bodies in Logcat, debug builds only
+                // Only wire the 401 refresh once we can read a refresh token;
+                // without preferences it would loop on 401 with no way out.
+                sessionPreferences?.let { prefs ->
+                    authenticator(TokenAuthenticator(refreshApi = refreshApi, preferences = prefs))
+                }
+                // Full request/response bodies in Logcat, debug builds only.
+                // Headers are included so the Authorization value is visible
+                // while debugging — never enable this in a release build.
                 if (BuildConfig.DEBUG) {
                     addInterceptor(
                         HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }
@@ -54,6 +75,26 @@ object ApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()
+    }
+
+    /**
+     * A separate client used only by [TokenAuthenticator] to call the refresh
+     * endpoint. It deliberately has no authenticator and no bearer interceptor,
+     * so a 401 here cannot trigger another refresh.
+     */
+    private val refreshApi: AuthApi by lazy {
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(
+                OkHttpClient.Builder()
+                    .addInterceptor(ngrokHeaderInterceptor)
+                    .connectTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(15, TimeUnit.SECONDS)
+                    .build()
+            )
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(AuthApi::class.java)
     }
 
     val retrofit: Retrofit by lazy {

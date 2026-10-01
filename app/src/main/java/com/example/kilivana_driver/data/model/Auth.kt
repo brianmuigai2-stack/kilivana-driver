@@ -32,5 +32,17 @@ data class LoginResult(
     val accessToken: String = "",
     val refreshToken: String = "",
     val tokenType: String = "",
+    /**
+     * Null in current development (JWT_EXPIRATION=0 means tokens don't expire).
+     * Modelled nullable per the integration spec; if real expiry is enabled
+     * this becomes a millisecond duration.
+     */
+    val expiresIn: Long? = null,
     val user: AuthUser = AuthUser()
+)
+
+/** Body for POST /api/v1/auth/refresh — the refresh token, not a token object. */
+@Serializable
+data class RefreshRequest(
+    val refreshToken: String
 )
