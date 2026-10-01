@@ -64,7 +64,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onLogout() {
-        viewModelScope.launch { authRepository.logout(SessionStore.userId) }
+        viewModelScope.launch { authRepository.logout() }
         _uiState.update { LoginUiState() }
     }
 
