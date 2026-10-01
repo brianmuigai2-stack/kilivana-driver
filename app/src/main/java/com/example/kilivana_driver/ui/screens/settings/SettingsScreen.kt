@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.kilivana_driver.BuildConfig
+import com.example.kilivana_driver.ui.components.KilivanaHeader
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
 import com.example.kilivana_driver.ui.theme.KilivanaError
@@ -118,10 +119,9 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(KilivanaBackground)
             .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        TopBar(title = "Settings", onBack = onBack)
+        KilivanaHeader(title = "Settings", onBack = onBack)
 
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             SectionLabel("Preferences")
@@ -274,7 +274,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
             title = { Text("Log out?") },
-            text = { Text("You'll need your phone number and password to sign in again.") },
+            text = { Text("You'll need your email address and password to sign in again.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -326,37 +326,6 @@ private fun ApiTestRow(
                 Text(text = "Test", color = KilivanaGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
-    }
-}
-
-@Composable
-private fun TopBar(title: String, onBack: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 8.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onBack),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = "Back",
-                tint = KilivanaTextPrimary,
-                modifier = Modifier.size(30.dp)
-            )
-        }
-        Text(
-            text = title,
-            color = KilivanaTextPrimary,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
     }
 }
 

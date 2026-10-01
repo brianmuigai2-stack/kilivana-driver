@@ -29,9 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.AuthUser
+import com.example.kilivana_driver.ui.components.KilivanaHeader
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaGreen
-import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
@@ -97,33 +97,7 @@ fun PersonalInfoScreen(
 
 @Composable
 internal fun ProfileSubHeader(title: String, onBack: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(KilivanaGreenCard)
-            .statusBarsPadding()
-            .padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = "Back",
-                tint = KilivanaWhite,
-                modifier = Modifier.size(30.dp)
-            )
-        }
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            color = KilivanaWhite,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
-        // Balances the back button so the title stays visually centred.
-        Box(modifier = Modifier.size(48.dp))
-    }
+    KilivanaHeader(title = title, onBack = onBack)
 }
 
 @Composable

@@ -64,7 +64,7 @@ fun MainScreen(
     onPickImage: () -> Unit = {},
     onDeleteImage: (Long) -> Unit = {},
     onDismissUploadMessage: () -> Unit = {},
-    onSetStatusBarDark: (Boolean) -> Unit = {}
+    onSetSystemBars: (darkHeader: Boolean, greenBand: Boolean) -> Unit = { _, _ -> }
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
     var selectedJobId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -108,7 +108,16 @@ fun MainScreen(
 
     val isMapLikeVisible = (selectedTab == BottomTab.MAP || activeTripJob != null) &&
         !showSettings && !showNotifications && selectedJob == null
-    LaunchedEffect(isMapLikeVisible) { onSetStatusBarDark(!isMapLikeVisible) }
+    // Settings and the three profile sub-screens all use KilivanaHeader, so the
+    // status bar is painted green while any of them is showing.
+    val greenBandVisible = showSettings || showPersonalInfo ||
+        showVehicleDetails || showProfileImages
+
+    // One call, not two: the status bar scrim and the icon appearance have to be
+    // applied together, or whichever effect runs last wins and they fight.
+    LaunchedEffect(isMapLikeVisible, greenBandVisible) {
+        onSetSystemBars(!isMapLikeVisible, greenBandVisible)
+    }
 
     when {
         showProfileImages -> ProfileImagesScreen(

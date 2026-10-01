@@ -14,8 +14,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
 import com.example.kilivana_driver.data.network.SessionStore
 import com.example.kilivana_driver.notifications.NotificationHelper
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardViewModel
@@ -27,6 +29,7 @@ import com.example.kilivana_driver.ui.screens.notifications.NotificationsViewMod
 import com.example.kilivana_driver.ui.screens.profile.ProfileViewModel
 import com.example.kilivana_driver.ui.screens.settings.SettingsViewModel
 import com.example.kilivana_driver.ui.screens.splash.SplashScreen
+import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 
 class MainActivity : ComponentActivity() {
@@ -67,9 +70,11 @@ class MainActivity : ComponentActivity() {
                     if (uri != null) profileViewModel.uploadImage(uri)
                 }
 
+                // Re-apply whenever either input changes, so the scrim tracks the
+                // header as the user moves between screens.
                 LaunchedEffect(showSplash, isSignedIn) {
                     if (showSplash || !isSignedIn) {
-                        setSystemBars(darkHeader = true)
+                        setSystemBars(darkHeader = true, greenBand = false)
                     }
                 }
 
@@ -111,7 +116,7 @@ class MainActivity : ComponentActivity() {
                         },
                         onDeleteImage = profileViewModel::deleteImage,
                         onDismissUploadMessage = profileViewModel::dismissMessage,
-                        onSetStatusBarDark = { dark -> setSystemBars(darkHeader = dark) }
+                        onSetSystemBars = { dark, green -> setSystemBars(dark, green) }
                     )
 
                     // Hold the splash until the remembered-session check finishes,
@@ -133,12 +138,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun setSystemBars(darkHeader: Boolean) {
+    /**
+     * Configures the system bars.
+     *
+     * [greenBand] must be true whenever a [com.example.kilivana_driver.ui.components.KilivanaHeader]
+     * is on screen. The status bar scrim is then set to the same green as the
+     * band, because on API < 29 the scrim is what actually paints the bar — with
+     * a transparent scrim the status bar falls back to the window background and
+     * the band looks like it stops short of the top of the screen. Newer
+     * versions ignore the scrim and let the band show through, so setting it
+     * makes both cases agree.
+     */
+    private fun setSystemBars(darkHeader: Boolean, greenBand: Boolean = false) {
+        val scrim = if (greenBand) KilivanaGreenCard.toArgb() else Color.TRANSPARENT
         enableEdgeToEdge(
             statusBarStyle = if (darkHeader) {
-                SystemBarStyle.dark(Color.TRANSPARENT)
+                SystemBarStyle.dark(scrim)
             } else {
-                SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                SystemBarStyle.light(scrim, scrim)
             },
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         )
