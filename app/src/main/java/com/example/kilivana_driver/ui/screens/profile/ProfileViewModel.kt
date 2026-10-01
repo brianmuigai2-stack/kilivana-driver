@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.Driver
 import com.example.kilivana_driver.data.model.DriverImage
+import com.example.kilivana_driver.data.model.DriverProfile
+import com.example.kilivana_driver.data.model.DriverProfileRequest
 import com.example.kilivana_driver.data.network.ProfileRepository
 import com.example.kilivana_driver.data.network.SessionStore
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -23,14 +26,16 @@ import java.io.File
 import java.util.Locale
 
 data class ProfileUiState(
+    val profile: DriverProfile? = null,
     val images: List<DriverImage> = emptyList(),
-    val imagesLoading: Boolean = false,
-    val imagesError: String? = null,
+    val isLoading: Boolean = false,
     val isUploading: Boolean = false,
-    val uploadError: String? = null,
-    val uploadSuccessMessage: String? = null
+    val isDeletingImage: Boolean = false,
+    val errorMessage: String? = null,
+    val successMessage: String? = null,
+    /** True when the backend has no driver profile for this user yet. */
+    val needsProfile: Boolean = false
 ) {
-    /** The image the header avatar should show, or null to fall back to initials. */
     val primaryImage: DriverImage?
         get() = images.firstOrNull { it.isPrimary } ?: images.minByOrNull { it.sortOrder }
 }
@@ -41,67 +46,108 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     private val profileRepository = ProfileRepository()
 
+    private val _uiState = MutableStateFlow(ProfileUiState())
+    val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
+
     /**
      * The driver shown in the header, derived from whoever is signed in.
      *
-     * [Driver.driverId] is the profile code the UI shows (e.g. "DRV-0042"),
-     * derived from the backend's numeric id since the API returns no such
-     * code yet. The rating/delivery counts still have no endpoint behind them
-     * and stay at their placeholder values until one exists.
+     * Combines the session and the loaded profile rather than reading
+     * [_uiState].value inside a map: Kotlin initialises properties in
+     * declaration order, so a flow that touched _uiState declared after it
+     * would run before that field existed and crash on launch.
+     *
+     * [Driver.driverId] is the code the UI shows (e.g. "DRV-0009"), derived from
+     * the backend's numeric id because the API exposes no display code of its
+     * own. The vehicle fields come from the driver profile, and the rating and
+     * delivery count have no endpoint behind them yet.
      */
-    val driver: StateFlow<Driver> = SessionStore.currentUser
-        .map { user ->
-            Driver(
-                name = user?.name.orEmpty(),
-                driverId = user?.let { "DRV-%04d".format(Locale.US, it.id) }.orEmpty(),
-                rating = 0.0,
-                deliveriesCompleted = 0,
-                vehiclePlate = "",
-                vehicleType = "",
-                paymentMethod = ""
-            )
-        }
+    val driver: StateFlow<Driver> = combine(
+        SessionStore.currentUser,
+        _uiState.map { it.profile }
+    ) { user, profile ->
+        Driver(
+            name = user?.name.orEmpty(),
+            driverId = user?.let { "DRV-%04d".format(Locale.US, it.id) }.orEmpty(),
+            rating = 0.0,
+            deliveriesCompleted = 0,
+            vehiclePlate = profile?.vehicleNumber.orEmpty(),
+            vehicleType = profile?.vehicleType.orEmpty(),
+            paymentMethod = profile?.availabilityStatus.orEmpty()
+        )
+    }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.Eagerly,
             initialValue = Driver("", "", 0.0, 0, "", "", "")
         )
 
-    private val _uiState = MutableStateFlow(ProfileUiState())
-    val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
-
     init {
-        // This ViewModel is created at activity launch, which is *before* the
-        // driver has logged in, so an eager load in init would always see a
-        // null session. Watching the session means the images load as soon as
-        // a login actually populates it, and clear again on logout.
+        // Created at activity launch, which is *before* the driver logs in, so
+        // an eager load would always see a null session. Watching the session
+        // loads once a login populates it and clears again on logout.
         viewModelScope.launch {
             SessionStore.currentUser.collect { user ->
-                if (user != null) {
-                    loadImages()
-                } else {
-                    _uiState.update { ProfileUiState() }
+                if (user != null) refresh() else _uiState.update { ProfileUiState() }
+            }
+        }
+    }
+
+    /** Loads the profile and its images in one pass. */
+    fun refresh() {
+        if (_uiState.value.isLoading) return
+        val userId = SessionStore.userId
+        if (userId == null) {
+            _uiState.update { it.copy(isLoading = false) }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+            val result = profileRepository.getProfile(userId)
+            if (result.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        // A missing profile is a state the UI can act on, not an
+                        // error to shout about, so it gets its own flag.
+                        needsProfile = isProfileMissing(result.exceptionOrNull()?.message),
+                        errorMessage = if (isProfileMissing(result.exceptionOrNull()?.message)) null
+                        else result.exceptionOrNull()?.message
+                    )
                 }
+                return@launch
+            }
+
+            val profile = result.getOrThrow()
+            val images = profileRepository.getImages(userId).getOrDefault(profile.images.orEmpty())
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    profile = profile,
+                    images = images,
+                    needsProfile = false,
+                    errorMessage = null
+                )
             }
         }
     }
 
     /**
-     * Uploads the picture the driver picked, then reloads the list so the new
-     * image comes straight from the server rather than being faked into local
-     * state — this way what you see is what the backend actually stored.
+     * Uploads the picture the driver picked. The response carries the server's
+     * full image list, so what renders afterwards is what the backend stored.
      */
     fun uploadImage(uri: Uri) {
         if (_uiState.value.isUploading) return
         val userId = SessionStore.userId
         if (userId == null) {
-            _uiState.update { it.copy(uploadError = "Please log in before uploading a photo") }
+            _uiState.update { it.copy(errorMessage = "Please log in before uploading a photo") }
             return
         }
 
         viewModelScope.launch {
             _uiState.update {
-                it.copy(isUploading = true, uploadError = null, uploadSuccessMessage = null)
+                it.copy(isUploading = true, errorMessage = null, successMessage = null)
             }
 
             val file = withContext(Dispatchers.IO) {
@@ -115,12 +161,12 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             }
             if (file == null) {
                 _uiState.update {
-                    it.copy(isUploading = false, uploadError = "Couldn't read that image")
+                    it.copy(isUploading = false, errorMessage = "Couldn't read that image")
                 }
                 return@launch
             }
 
-            val result = profileRepository.uploadDriverImage(
+            val result = profileRepository.uploadImage(
                 userId = userId,
                 file = file,
                 isPrimary = _uiState.value.images.isEmpty()
@@ -130,35 +176,41 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update {
                 it.copy(
                     isUploading = false,
-                    uploadError = result.exceptionOrNull()?.message,
-                    uploadSuccessMessage = if (result.isSuccess) "Photo uploaded" else null
+                    images = result.getOrNull() ?: it.images,
+                    errorMessage = result.exceptionOrNull()?.message,
+                    successMessage = if (result.isSuccess) "Photo uploaded" else null
                 )
             }
-            if (result.isSuccess) loadImages()
         }
     }
 
-    fun dismissUploadMessage() {
-        _uiState.update { it.copy(uploadError = null, uploadSuccessMessage = null) }
-    }
+    fun deleteImage(imageId: Long) {
+        val userId = SessionStore.userId ?: return
+        if (_uiState.value.isDeletingImage) return
 
-    fun loadImages() {
-        if (_uiState.value.imagesLoading) return
-        val userId = SessionStore.userId
-        if (userId == null) {
-            _uiState.update { it.copy(imagesLoading = false, imagesError = null) }
-            return
-        }
         viewModelScope.launch {
-            _uiState.update { it.copy(imagesLoading = true, imagesError = null) }
-            val result = profileRepository.getDriverImages(userId)
+            _uiState.update {
+                it.copy(isDeletingImage = true, errorMessage = null, successMessage = null)
+            }
+            val result = profileRepository.deleteImage(userId, imageId)
             _uiState.update {
                 it.copy(
-                    imagesLoading = false,
-                    images = result.getOrDefault(emptyList()),
-                    imagesError = result.exceptionOrNull()?.message
+                    isDeletingImage = false,
+                    // Only drop it locally once the server confirms the delete.
+                    images = if (result.isSuccess) it.images.filterNot { i -> i.id == imageId }
+                    else it.images,
+                    successMessage = if (result.isSuccess) "Photo removed" else null,
+                    errorMessage = result.exceptionOrNull()?.message
                 )
             }
         }
     }
+
+    fun dismissMessage() {
+        _uiState.update { it.copy(errorMessage = null, successMessage = null) }
+    }
+
+    private fun isProfileMissing(message: String?): Boolean =
+        message?.contains("profile not found", ignoreCase = true) == true ||
+            message?.contains("RESOURCE_NOT_FOUND", ignoreCase = true) == true
 }
