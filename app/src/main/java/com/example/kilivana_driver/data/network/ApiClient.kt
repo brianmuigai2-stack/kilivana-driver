@@ -1,5 +1,6 @@
 package com.example.kilivana_driver.data.network
 
+import android.util.Log
 import com.example.kilivana_driver.BuildConfig
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
@@ -64,11 +65,17 @@ object ApiClient {
                     authenticator(TokenAuthenticator(refreshApi = refreshApi, preferences = prefs))
                 }
                 // Full request/response bodies in Logcat, debug builds only.
-                // Headers are included so the Authorization value is visible
-                // while debugging — never enable this in a release build.
+                // Secrets are masked first: the Authorization header, and the
+                // password / token fields inside JSON bodies, so a copied
+                // Logcat never leaks a login.
                 if (BuildConfig.DEBUG) {
                     addInterceptor(
-                        HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }
+                        HttpLoggingInterceptor { message ->
+                            Log.d("KilivanaHttp", redactSecrets(message))
+                        }.apply {
+                            redactHeader("Authorization")
+                            level = HttpLoggingInterceptor.Level.BODY
+                        }
                     )
                 }
             }
@@ -104,6 +111,12 @@ object ApiClient {
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
     }
+
+    private val secretJsonFields = Regex("\"(password|accessToken|refreshToken)\"\\s*:\\s*\"[^\"]*\"")
+
+    /** Replaces the value of password and token JSON fields with ***. */
+    private fun redactSecrets(message: String): String =
+        secretJsonFields.replace(message) { match -> "\"${match.groupValues[1]}\":\"***\"" }
 
     /** Creates a Retrofit API interface, e.g. ApiClient.create<AuthApi>(). */
     inline fun <reified T> create(): T = retrofit.create(T::class.java)

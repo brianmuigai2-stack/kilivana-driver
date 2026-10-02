@@ -28,16 +28,22 @@ data class ApiError(
 /**
  * One uploaded image from GET /api/v1/profiles/drivers/{userId}/images.
  *
- * The backend hands back both `url` (what you display) and the Cloudinary-ish
- * `publicId`/`assetId` pair (what you'd use to delete or reorder the image
- * later), so all three are kept even though the UI only needs [url] today.
+ * The backend hands back both `url` (what you display) and the storage
+ * `publicId`/`assetId` pair, so all three are kept even though the UI only
+ * needs [url] today.
+ *
+ * [assetId] is nullable because the backend genuinely returns `null` for it —
+ * files are served from its own /uploads path, so there is no external asset
+ * identifier to report. It has to be declared nullable rather than given a
+ * default: kotlinx.serialization only applies a default when a key is *absent*,
+ * and throws on an explicit `null` for a non-null field.
  */
 @Serializable
 data class DriverImage(
     val id: Long = 0L,
     val url: String = "",
     val publicId: String = "",
-    val assetId: String = "",
+    val assetId: String? = null,
     val sortOrder: Int = 0,
     val isPrimary: Boolean = false,
     val createdAt: String = "",

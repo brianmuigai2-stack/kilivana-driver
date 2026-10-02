@@ -6,6 +6,7 @@ import okhttp3.Authenticator
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.Route
+import retrofit2.HttpException
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -54,30 +55,51 @@ class TokenAuthenticator(
                 return@withLock response.request.withBearer(currentToken)
             }
 
-            val refreshToken = preferences.refreshToken() ?: return@withLock null
-            val refreshed = runBlocking {
-                runCatching { refreshApi.refresh(RefreshRequest(refreshToken)) }.getOrNull()
-            }
-
-            val newToken = refreshed?.data?.accessToken
-            if (refreshed?.success != true || newToken.isNullOrBlank()) {
-                // The refresh token is dead: drop the session so the UI can
-                // send the driver back to login instead of looping on 401s.
-                SessionStore.clear()
-                runBlocking { preferences.clear() }
+            // Read the refresh token from the live session, not from disk. Disk
+            // only holds it when "Remember me" was ticked, so reading it from
+            // there meant refresh silently never worked for everyone else.
+            val refreshToken = SessionStore.refreshToken.value?.takeIf { it.isNotBlank() }
+                ?: preferences.refreshToken()?.takeIf { it.isNotBlank() }
+            if (refreshToken == null) {
+                // Nothing to refresh with: end the session so the UI returns to login.
+                endSession()
                 return@withLock null
             }
 
-            SessionStore.updateTokens(
-                accessToken = newToken,
-                refreshToken = refreshed.data.refreshToken.ifBlank { refreshToken }
-            )
-            preferences.saveTokens(
-                accessToken = newToken,
-                refreshToken = refreshed.data.refreshToken.ifBlank { refreshToken }
-            )
+            val refreshed = try {
+                runBlocking { refreshApi.refresh(RefreshRequest(refreshToken)) }
+            } catch (e: HttpException) {
+                // The server answered and said no: the refresh token is dead.
+                if (e.code() == 400 || e.code() == 401 || e.code() == 403) endSession()
+                return@withLock null
+            } catch (e: Exception) {
+                // No signal, timeout, etc. The token may still be fine, so keep
+                // the session and let the next request try again.
+                return@withLock null
+            }
+
+            val data = refreshed.data
+            if (!refreshed.success || data == null || data.accessToken.isBlank()) {
+                endSession()
+                return@withLock null
+            }
+
+            val newToken = data.accessToken
+            val newRefresh = data.refreshToken.ifBlank { refreshToken }
+            SessionStore.updateTokens(accessToken = newToken, refreshToken = newRefresh)
+            // Only write to disk if the driver chose "Remember me" (tokens are on
+            // disk only in that case); otherwise keep them in memory.
+            if (!preferences.refreshToken().isNullOrBlank()) {
+                preferences.saveTokens(accessToken = newToken, refreshToken = newRefresh)
+            }
             response.request.withBearer(newToken)
         }
+    }
+
+    /** Drops the in-memory and stored session so the app falls back to login. */
+    private fun endSession() {
+        SessionStore.clear()
+        runBlocking { preferences.clear() }
     }
 }
 

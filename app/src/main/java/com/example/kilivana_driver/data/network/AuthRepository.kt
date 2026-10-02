@@ -12,6 +12,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 
+/** The backend `role` value for a driver account. Confirm it against your API. */
+private const val DRIVER_ROLE = "DRIVER"
+
+private fun AuthUser.isDriver(): Boolean = role.equals(DRIVER_ROLE, ignoreCase = true)
+
 /**
  * Signs the driver in and reads back the signed-in user.
  *
@@ -55,19 +60,37 @@ class AuthRepository(
         }
         SessionStore.save(restored.user, access, refresh)
 
-        val me = me()
-        if (me.isFailure) {
-            // /auth/me is authoritative: if the token is no longer good, the
-            // driver must log in again rather than half-work.
-            SessionStore.clear()
-            prefs.clear()
-            _restoreComplete.value = true
-            return false
-        }
+        return when (val check = checkSession()) {
+            is SessionCheck.Valid -> {
+                if (check.user.isDriver()) {
+                    SessionStore.save(check.user, SessionStore.accessToken.value, SessionStore.refreshToken.value)
+                    _restoreComplete.value = true
+                    true
+                } else {
+                    SessionStore.clear()
+                    prefs.clear()
+                    _restoreComplete.value = true
+                    false
+                }
+            }
 
-        me.getOrNull()?.let { SessionStore.save(it, SessionStore.accessToken.value, refresh) }
-        _restoreComplete.value = true
-        return true
+            SessionCheck.Rejected -> {
+                // The server answered and said this session is no good (expired
+                // or revoked), so the driver must log in again.
+                SessionStore.clear()
+                prefs.clear()
+                _restoreComplete.value = true
+                false
+            }
+
+            SessionCheck.Unreachable -> {
+                // No signal or the server is down. That says nothing about the
+                // session, so keep the cached user and tokens and let the
+                // driver in; requests will work again once they are online.
+                _restoreComplete.value = true
+                true
+            }
+        }
     }
 
     /**
@@ -84,6 +107,14 @@ class AuthRepository(
                 val response = api.login(LoginRequest(email = email.trim(), password = password))
                 val data = response.data
                 when {
+                    // Right password, wrong kind of account (e.g. an admin): do not
+                    // keep the session. The server still enforces roles; this just
+                    // stops the driver app from opening for non-drivers.
+                    response.success && data != null && data.accessToken.isNotBlank() &&
+                        !data.user.isDriver() -> Result.failure(
+                        Exception("This app is for Kilivana drivers only.")
+                    )
+
                     response.success && data != null && data.accessToken.isNotBlank() -> {
                         SessionStore.save(data.user, data.accessToken, data.refreshToken)
                         if (rememberMe) {
@@ -136,6 +167,30 @@ class AuthRepository(
             if (result.isFailure) Result.failure(result.exceptionOrNull()!!)
             else Result.success(Unit)
         }
+
+    private sealed interface SessionCheck {
+        data class Valid(val user: AuthUser) : SessionCheck
+        data object Rejected : SessionCheck
+        data object Unreachable : SessionCheck
+    }
+
+    /**
+     * Asks /auth/me whether the stored session still works, and tells a real
+     * rejection (401/403) apart from simply being offline. A 401 first goes
+     * through the token authenticator, so an expired access token with a valid
+     * refresh token is refreshed and counts as Valid.
+     */
+    private suspend fun checkSession(): SessionCheck = withContext(Dispatchers.IO) {
+        try {
+            val response = api.me()
+            val user = response.data
+            if (response.success && user != null) SessionCheck.Valid(user) else SessionCheck.Rejected
+        } catch (e: HttpException) {
+            if (e.code() == 401 || e.code() == 403) SessionCheck.Rejected else SessionCheck.Unreachable
+        } catch (e: Exception) {
+            SessionCheck.Unreachable
+        }
+    }
 
     private fun readErrorBody(e: HttpException): String? {
         val raw = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
