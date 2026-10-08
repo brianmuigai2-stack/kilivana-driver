@@ -1,4 +1,4 @@
-# Kilivana Driver 🚚
+# Kilivana Driver 
 
 The Android app for Kilivana's delivery drivers: the people who carry fresh produce and farm inputs from farmers to buyers across Kenya. A driver logs in, picks up jobs, follows real road routes from where they are to the farmer and on to the buyer, and keeps track of their deliveries and notifications.
 
