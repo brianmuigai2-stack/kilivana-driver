@@ -2,6 +2,7 @@ package com.example.kilivana_driver.ui.screens.profile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,24 +15,38 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.outlined.AddAPhoto
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.kilivana_driver.data.model.DriverImage
 import com.example.kilivana_driver.ui.components.KilivanaButton
@@ -43,13 +58,6 @@ import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
-/**
- * The driver's licence and vehicle photos.
- *
- * Unlike the rest of the profile, images ARE the driver's to manage: the
- * backend allows a driver to upload and delete their own images even though
- * the vehicle and licence text is admin-only.
- */
 @Composable
 fun ProfileImagesScreen(
     images: List<DriverImage>,
@@ -60,6 +68,15 @@ fun ProfileImagesScreen(
     onDeleteImage: (DriverImage) -> Unit,
     onBack: () -> Unit
 ) {
+    var viewingImage by remember { mutableStateOf<DriverImage?>(null) }
+
+    viewingImage?.let { image ->
+        FullScreenImageDialog(
+            url = image.url,
+            onDismiss = { viewingImage = null }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -98,6 +115,7 @@ fun ProfileImagesScreen(
                         ImageTile(
                             image = image,
                             isDeleting = isDeleting,
+                            onView = { viewingImage = image },
                             onDelete = { onDeleteImage(image) }
                         )
                     }
@@ -108,9 +126,68 @@ fun ProfileImagesScreen(
 }
 
 @Composable
+private fun FullScreenImageDialog(url: String, onDismiss: () -> Unit) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            AsyncImage(
+                model = url,
+                contentDescription = "Full screen image",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale = (scale * zoom).coerceIn(1f, 5f)
+                            offsetX = if (scale == 1f) 0f else offsetX + pan.x
+                            offsetY = if (scale == 1f) 0f else offsetY + pan.y
+                        }
+                    }
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        translationX = offsetX,
+                        translationY = offsetY
+                    ),
+                contentScale = ContentScale.Fit
+            )
+
+            Box(
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(12.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .clickable(onClick = onDismiss)
+                    .align(Alignment.TopEnd),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = "Close",
+                    tint = KilivanaWhite,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ImageTile(
     image: DriverImage,
     isDeleting: Boolean,
+    onView: () -> Unit,
     onDelete: () -> Unit
 ) {
     Box(
@@ -119,6 +196,7 @@ private fun ImageTile(
             .height(150.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(KilivanaGreenTint)
+            .clickable(onClick = onView)
     ) {
         AsyncImage(
             model = image.url,

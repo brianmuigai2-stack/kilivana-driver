@@ -2,6 +2,7 @@ package com.example.kilivana_driver.ui.screens.profile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Info
@@ -44,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,13 +55,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.kilivana_driver.data.model.Driver
 import com.example.kilivana_driver.ui.theme.KilivanaAmber
 import com.example.kilivana_driver.ui.theme.KilivanaAmberTint
@@ -89,9 +101,12 @@ fun ProfileScreen(
     onNotificationsClick: () -> Unit = {},
     onHelpClick: () -> Unit = {},
     onLogout: () -> Unit,
+    onDeletePhoto: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showDeletePhotoDialog by remember { mutableStateOf(false) }
+    var viewingProfileImage by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -107,6 +122,7 @@ fun ProfileScreen(
             primaryImageUrl = uiState.primaryImage?.url,
             uploading = uiState.isUploading,
             onPickImage = onPickImage,
+            onViewImage = { viewingProfileImage = true },
             onBack = onBack,
             onSettingsClick = onSettingsClick
         )
@@ -233,31 +249,75 @@ fun ProfileScreen(
                 )
             }
 
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = { showDeletePhotoDialog = true },
+                enabled = uiState.primaryImage != null && !uiState.isDeletingImage,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, KilivanaNotificationRed),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = KilivanaWhite,
+                    contentColor = KilivanaNotificationRed
+                )
+            ) {
+                if (uiState.isDeletingImage) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = KilivanaNotificationRed
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Delete photo",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
-    if (showLogoutDialog) {
+    val profileImageUrl = uiState.primaryImage?.url
+    if (viewingProfileImage && !profileImageUrl.isNullOrBlank()) {
+        ImageViewerDialog(
+            url = profileImageUrl,
+            onDismiss = { viewingProfileImage = false }
+        )
+    }
+
+    if (showDeletePhotoDialog) {
         AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = { Text("Log out?") },
-            text = { Text("You'll need your phone number and password to sign in again.") },
+            onDismissRequest = { showDeletePhotoDialog = false },
+            title = { Text("Delete profile photo?") },
+            text = { Text("Your current photo will be removed. You can upload a new one anytime.") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showLogoutDialog = false
-                        onLogout()
+                        showDeletePhotoDialog = false
+                        onDeletePhoto()
                     }
                 ) {
                     Text(
-                        text = "Log Out",
+                        text = "Delete",
                         color = KilivanaNotificationRed,
                         fontWeight = FontWeight.Bold
                     )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
+                TextButton(onClick = { showDeletePhotoDialog = false }) {
                     Text(text = "Cancel", color = KilivanaTextMuted)
                 }
             }
@@ -271,6 +331,7 @@ private fun ProfileHeader(
     primaryImageUrl: String?,
     uploading: Boolean,
     onPickImage: () -> Unit,
+    onViewImage: () -> Unit,
     onBack: (() -> Unit)?,
     onSettingsClick: () -> Unit
 ) {
@@ -338,45 +399,86 @@ private fun ProfileHeader(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Tap the avatar to add or change the photo. Falls back to the
-            // driver's initials until the backend actually returns an image.
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(KilivanaWhite.copy(alpha = 0.2f))
-                    .clickable(enabled = !uploading, onClick = onPickImage),
-                contentAlignment = Alignment.Center
-            ) {
-                if (primaryImageUrl.isNullOrBlank()) {
-                    Text(
-                        text = driver.name.split(" ").mapNotNull { it.firstOrNull() }.take(2)
-                            .joinToString("").uppercase(),
-                        color = KilivanaWhite,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                } else {
-                    AsyncImage(
-                        model = primaryImageUrl,
-                        contentDescription = "Profile photo",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+            // Tap avatar = view photo (if one exists) or pick one.
+            // Camera badge always lets the driver change the photo.
+            Box(modifier = Modifier.size(80.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(KilivanaWhite.copy(alpha = 0.2f))
+                        .clickable(
+                            enabled = !uploading,
+                            onClick = if (primaryImageUrl.isNullOrBlank()) onPickImage else onViewImage
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (primaryImageUrl.isNullOrBlank()) {
+                        Text(
+                            text = driver.name.split(" ").mapNotNull { it.firstOrNull() }.take(2)
+                                .joinToString("").uppercase(),
+                            color = KilivanaWhite,
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        var imageError by remember(primaryImageUrl) { mutableStateOf(false) }
+                        if (imageError) {
+                            Text(
+                                text = driver.name.split(" ").mapNotNull { it.firstOrNull() }.take(2)
+                                    .joinToString("").uppercase(),
+                                color = KilivanaWhite,
+                                fontSize = 26.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            val context = LocalContext.current
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(primaryImageUrl)
+                                    .diskCachePolicy(CachePolicy.DISABLED)
+                                    .build(),
+                                contentDescription = "Profile photo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                                error = ColorPainter(androidx.compose.ui.graphics.Color.Transparent),
+                                onError = { imageError = true }
+                            )
+                        }
+                    }
+
+                    if (uploading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = KilivanaWhite
+                            )
+                        }
+                    }
                 }
 
-                if (uploading) {
+                if (!uploading) {
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .size(26.dp)
+                            .align(Alignment.BottomEnd)
                             .clip(CircleShape)
-                            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)),
+                            .background(KilivanaGreen)
+                            .clickable(onClick = onPickImage),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp,
-                            color = KilivanaWhite
+                        Icon(
+                            imageVector = Icons.Outlined.PhotoCamera,
+                            contentDescription = "Change photo",
+                            tint = KilivanaWhite,
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
@@ -419,6 +521,67 @@ private fun ProfileHeader(
                     text = " (${driver.deliveriesCompleted} deliveries completed)",
                     color = KilivanaWhite.copy(alpha = 0.85f),
                     fontSize = 13.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ImageViewerDialog(url: String, onDismiss: () -> Unit) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(androidx.compose.ui.graphics.Color.Black)
+        ) {
+            val context = LocalContext.current
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(url)
+                    .diskCachePolicy(CachePolicy.DISABLED)
+                    .build(),
+                contentDescription = "Full screen image",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale = (scale * zoom).coerceIn(1f, 5f)
+                            offsetX = if (scale == 1f) 0f else offsetX + pan.x
+                            offsetY = if (scale == 1f) 0f else offsetY + pan.y
+                        }
+                    }
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        translationX = offsetX,
+                        translationY = offsetY
+                    ),
+                contentScale = ContentScale.Fit
+            )
+            Box(
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(12.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.5f))
+                    .clickable(onClick = onDismiss)
+                    .align(Alignment.TopEnd),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = "Close",
+                    tint = KilivanaWhite,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }

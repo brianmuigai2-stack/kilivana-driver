@@ -73,7 +73,8 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             deliveriesCompleted = 0,
             vehiclePlate = profile?.vehicleNumber.orEmpty(),
             vehicleType = profile?.vehicleType.orEmpty(),
-            paymentMethod = profile?.availabilityStatus.orEmpty()
+            paymentMethod = profile?.availabilityStatus.orEmpty(),
+            photoUrl = profile?.primaryImage?.url.orEmpty()
         )
     }
         .stateIn(
@@ -166,17 +167,31 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                 return@launch
             }
 
+            // A profile photo is a single visible picture, so each upload
+            // replaces the one before it: the new image goes up as primary
+            // (the backend demotes the old primary) and the old primary is
+            // then deleted. Without this the backend just appends, leaving
+            // the previous photo on screen.
+            val previousPrimaryId = _uiState.value.primaryImage?.id
+
             val result = profileRepository.uploadImage(
                 userId = userId,
                 file = file,
-                isPrimary = _uiState.value.images.isEmpty()
+                isPrimary = true
             )
             file.delete()
 
-            _uiState.update {
-                it.copy(
+            if (result.isSuccess && previousPrimaryId != null) {
+                profileRepository.deleteImage(userId, previousPrimaryId)
+            }
+
+            _uiState.update { state ->
+                val newImages = result.getOrNull() ?: state.images
+                state.copy(
                     isUploading = false,
-                    images = result.getOrNull() ?: it.images,
+                    images = if (result.isSuccess && previousPrimaryId != null) {
+                        newImages.filterNot { it.id == previousPrimaryId }
+                    } else newImages,
                     errorMessage = result.exceptionOrNull()?.message,
                     successMessage = if (result.isSuccess) "Photo uploaded" else null
                 )
@@ -204,6 +219,18 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                 )
             }
         }
+    }
+
+    /**
+     * Deletes whatever the driver is currently showing as their primary photo.
+     *
+     * The "Delete photo" button on the profile screen targets the avatar itself,
+     * not the photo grid, so it resolves the primary image at call time and
+     * routes through the same [deleteImage] path the grid uses.
+     */
+    fun deletePrimaryPhoto() {
+        val primaryId = _uiState.value.primaryImage?.id ?: return
+        deleteImage(primaryId)
     }
 
     fun dismissMessage() {

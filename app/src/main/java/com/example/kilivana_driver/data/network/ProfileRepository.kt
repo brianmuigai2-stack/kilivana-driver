@@ -29,7 +29,7 @@ class ProfileRepository(
 
     /** The signed-in driver's profile, or a failure if they have not created one. */
     suspend fun getProfile(userId: Long): Result<DriverProfile> =
-        call { api.getDriverProfile(userId) }
+        call { api.getDriverProfile(userId).mapProfileImages() }
 
     suspend fun createProfile(
         userId: Long,
@@ -50,7 +50,7 @@ class ProfileRepository(
         callUnit { api.deleteDriverProfile(userId) }
 
     suspend fun getImages(userId: Long): Result<List<DriverImage>> =
-        call { api.getDriverImages(userId) }
+        call { api.getDriverImages(userId).mapImages() }
 
     /**
      * Uploads one image from a local file, e.g. a photo the driver picked, and
@@ -75,7 +75,7 @@ class ProfileRepository(
                 userId = userId,
                 image = part,
                 isPrimary = isPrimary
-            )
+            ).mapImages()
             if (response.success) {
                 Result.success(response.data.orEmpty())
             } else {
@@ -119,6 +119,24 @@ class ProfileRepository(
     } catch (e: Exception) {
         Result.failure(e)
     }
+
+    /**
+     * Ensures every image URL is absolute. The backend sometimes returns a
+     * relative path like "/uploads/foo.jpg" — prepend the base URL so Coil
+     * can actually load it.
+     */
+    private fun resolveUrl(url: String): String {
+        val base = ApiClient.BASE_URL.trimEnd('/')
+        return if (url.startsWith("http")) url else "$base$url"
+    }
+
+    private fun ApiResponse<List<DriverImage>>.mapImages(): ApiResponse<List<DriverImage>> =
+        copy(data = data?.map { it.copy(url = resolveUrl(it.url)) })
+
+    private fun ApiResponse<DriverProfile>.mapProfileImages(): ApiResponse<DriverProfile> =
+        copy(data = data?.let { p ->
+            p.copy(images = p.images?.map { it.copy(url = resolveUrl(it.url)) })
+        })
 
     private fun mediaTypeFor(file: File) = when (file.extension.lowercase()) {
         "png" -> "image/png".toMediaTypeOrNull()

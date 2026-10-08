@@ -1,6 +1,7 @@
 package com.example.kilivana_driver
 
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -31,6 +32,8 @@ import com.example.kilivana_driver.ui.screens.settings.SettingsViewModel
 import com.example.kilivana_driver.ui.screens.splash.SplashScreen
 import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
+import com.yalantis.ucrop.UCrop
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -64,10 +67,36 @@ class MainActivity : ComponentActivity() {
                 val currentUser by sessionStoreUser.collectAsState()
                 val notificationsState by notificationsViewModel.uiState.collectAsState()
 
+                // The header avatar reads the driver's photo URL, which lives on
+                // the profile (not the dashboard view model), so fold it in here
+                // rather than making the dashboard reach into profile state.
+                val dashboardStateWithPhoto = dashboardState.copy(
+                    photoUrl = driver.photoUrl
+                )
+
+                val cropDest = remember {
+                    Uri.fromFile(File(cacheDir, "profile_crop.jpg"))
+                }
+
+                val cropLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    val cropped = UCrop.getOutput(result.data ?: return@rememberLauncherForActivityResult)
+                    if (result.resultCode == RESULT_OK && cropped != null) {
+                        profileViewModel.uploadImage(cropped)
+                    }
+                }
+
                 val pickImage = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.PickVisualMedia()
                 ) { uri ->
-                    if (uri != null) profileViewModel.uploadImage(uri)
+                    if (uri != null) {
+                        val intent = UCrop.of(uri, cropDest)
+                            .withAspectRatio(1f, 1f)
+                            .withMaxResultSize(800, 800)
+                            .getIntent(this@MainActivity)
+                        cropLauncher.launch(intent)
+                    }
                 }
 
                 // Re-apply whenever either input changes, so the scrim tracks the
@@ -82,7 +111,7 @@ class MainActivity : ComponentActivity() {
                     showSplash -> SplashScreen(onFinished = { showSplash = false })
 
                     isSignedIn -> MainScreen(
-                        dashboardState = dashboardState,
+                        dashboardState = dashboardStateWithPhoto,
                         jobsState = jobsState,
                         driver = driver,
                         settingsState = settingsState,
@@ -115,6 +144,7 @@ class MainActivity : ComponentActivity() {
                             )
                         },
                         onDeleteImage = profileViewModel::deleteImage,
+                        onDeletePhoto = profileViewModel::deletePrimaryPhoto,
                         onDismissUploadMessage = profileViewModel::dismissMessage,
                         onSetSystemBars = { dark, green -> setSystemBars(dark, green) }
                     )

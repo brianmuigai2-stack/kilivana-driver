@@ -25,7 +25,9 @@ data class DashboardUiState(
     val deliveriesAssigned: Int = 0,
     val estimatedTransit: String = "",
     val hasUnreadNotifications: Boolean = false,
-    val recentActivity: List<ActivityItem> = emptyList()
+    val recentActivity: List<ActivityItem> = emptyList(),
+    /** Primary profile image URL, or blank to fall back to initials. */
+    val photoUrl: String = ""
 )
 
 class DashboardViewModel : ViewModel() {
