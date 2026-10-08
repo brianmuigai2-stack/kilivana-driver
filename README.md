@@ -2,7 +2,7 @@
 
 The Android app for Kilivana's delivery drivers: the people who carry fresh produce and farm inputs from farmers to buyers across Kenya. A driver logs in, picks up jobs, follows real road routes from where they are to the farmer and on to the buyer, and keeps track of their deliveries and notifications.
 
-> **Status:** UI-complete prototype running on sample data. There is no backend yet. See [What's real and what's a placeholder](#whats-real-and-whats-a-placeholder).
+> **Status:** Running against the live Kilivana backend over an ngrok tunnel, with a Render failover. Profile, licence/vehicle details and photo upload/delete are real; jobs, history and notifications still use sample data. See [What's real and what's a placeholder](#whats-real-and-whats-a-placeholder).
 
 ## Features
 
@@ -15,7 +15,7 @@ The Android app for Kilivana's delivery drivers: the people who carry fresh prod
 - **Map** tab with a live OpenStreetMap map, a "you are here" dot, a recenter button, and handling for denied permission and GPS switched off.
 - **Delivery history** with All / Completed / Cancelled filters.
 - **Notifications** inbox with unread highlighting, filters and "Mark all read".
-- **Profile** with rating, vehicle and payment details, and log out.
+- **Profile** with rating, vehicle and payment details, and log out. Your profile photo is loaded from the backend and shown on both the profile screen and the home greeting header; you can upload a new one (square-cropped to 800px) or delete the current one.
 - **Settings** with notification toggles, language picker, dark mode toggle and app version.
 
 ### Navigation
@@ -38,7 +38,10 @@ More (Profile) → Settings
 | Map tiles | Real (OpenStreetMap) |
 | Road routes | Real (OSRM public demo server), with a straight-line fallback and an on-screen note if it fails |
 | Login | **Placeholder.** Any phone with 9+ digits and a password of 4+ characters gets in |
-| Jobs, history, notifications, profile | **Sample data** inside the ViewModels, marked with `TODO` |
+| Profile (read, create, update, images) | **Real** — backed by `ProfileApi`/`ProfileRepository` |
+| Profile photo upload & delete | **Real** — multipart upload via UCrop, single-image delete |
+| Driver photo on the home header | **Real** — loaded with Coil, falls back to initials |
+| Jobs, history, notifications | **Sample data** inside the ViewModels, marked with `TODO` |
 | Dark mode | Toggle is stored, but there is no dark theme yet |
 | Language | Picker is stored, but the app isn't translated yet |
 | Push notifications | Not implemented |
@@ -48,6 +51,9 @@ More (Profile) → Settings
 
 - **Kotlin** and **Jetpack Compose** with **Material 3**
 - **MVVM**: a `ViewModel` per feature exposing a `StateFlow` of one `UiState`
+- **Retrofit + OkHttp + kotlinx.serialization** for the backend API, with an ngrok-header interceptor and an automatic host failover to a Render fallback
+- **UCrop** for square-cropping profile photos before upload
+- **Coil** for loading profile photos into the header and profile screen
 - **osmdroid** (OpenStreetMap) for maps
 - **Google Play Services Location** for GPS
 - **OSRM** public API for road routes (plain `HttpURLConnection`, no extra networking library)
@@ -81,7 +87,8 @@ There are **no API keys** to set up.
 app/src/main/java/com/example/kilivana_driver/
 ├── MainActivity.kt              # Creates the ViewModels, handles status bar style
 ├── data/
-│   ├── model/                   # Job, Driver, DeliveryRecord, AppNotification
+│   ├── model/                   # Job, Driver, DriverProfile, DriverImage, Auth…
+│   │   └── network/             # ApiClient, ProfileApi/Repository, AuthApi/Repository, SessionStore
 │   └── routing/RouteRepository.kt   # Fetches road routes from OSRM
 └── ui/
     ├── components/              # KilivanaButton, KilivanaTextField,
@@ -96,7 +103,7 @@ app/src/main/java/com/example/kilivana_driver/
         ├── map/                 # MapScreen, UserLocation helpers
         ├── history/
         ├── notifications/
-        ├── profile/
+        ├── profile/             # ProfileScreen, ProfileImagesScreen, VehicleDetailsScreen, ProfileViewModel
         └── settings/
 app/src/main/res/drawable/       # kilivana_logo.jpg, splashscreen.jpg
 ```
@@ -122,16 +129,30 @@ For a real launch, point the map at a paid tile provider (or Google Maps) and th
 
 - [ ] Delivery Confirmation screen after "Mark as Delivered"
 - [ ] Real authentication with secure token storage
-- [ ] Connect jobs, history, profile and notifications to the backend API
+- [ ] Connect jobs, history and notifications to the backend API
 - [ ] Push notifications (Firebase Cloud Messaging)
 - [ ] Background location while on a trip (foreground service)
 - [ ] Tapping a notification opens the related job
 - [ ] Dark theme
 - [ ] Kiswahili translation
 - [ ] Persist settings (DataStore)
-- [ ] Driver photo loading (Coil)
 - [ ] Replace the `com.example` package name and applicationId
 - [ ] Release signing and ProGuard rules
+
+## Backend integration
+
+The app talks to a Kilivana REST API over `api/v1/...`. The base URL is configured in `ApiClient.kt`:
+
+- `BASE_URL` — the primary ngrok tunnel used during development
+- `FALLBACK_BASE_URL` — a hosted Render deployment
+- `LOCAL_BASE_URL` / `LAN_BASE_URL` — for testing against a machine on the local network
+
+Two mechanisms keep the flaky ngrok tunnel from breaking every call:
+
+1. **`ngrokHeaderInterceptor`** adds `ngrok-skip-browser-warning: true` to requests hitting the tunnel, so the tunnel's HTML interstitial is never returned as a JSON parse error.
+2. **`HostFailoverInterceptor`** retries a request against the fallback hosts when the primary host dies at the transport level or returns an HTML body. It remembers the last host that answered, so a dead tunnel costs one slow call rather than one per request.
+
+`AuthInterceptor` attaches the bearer token centrally, and `TokenAuthenticator` refreshes it on a 401. Profile endpoints are defined in `ProfileApi.kt` and wrapped in `ProfileRepository.kt`, which returns `Result<T>` and surfaces the backend's `error.code` / `error.details` rather than a bare HTTP status.
 
 ## Design
 
