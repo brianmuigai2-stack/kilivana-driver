@@ -22,6 +22,16 @@ android {
     }
 
     buildTypes {
+        debug {
+            // R8 is enabled only so it computes a main-dex list
+            // from multidex-keep.pro. Shrinking, obfuscation and
+            // optimization are all disabled in that file, so the
+            // output is identical to a plain debug build — the
+            // only change is that the Application class is forced
+            // into the primary dex.
+            isMinifyEnabled = true
+            multiDexKeepProguard = file("multidex-keep.pro")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -61,6 +71,10 @@ dependencies {
     implementation(libs.retrofit.kotlinx.serialization.converter)
     implementation(libs.okhttp.logging.interceptor)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coil.compose)
+    implementation(libs.ucrop)
+    implementation(libs.datastore.preferences)
+    implementation(libs.security.crypto)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

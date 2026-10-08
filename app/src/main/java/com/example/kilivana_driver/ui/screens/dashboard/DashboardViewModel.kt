@@ -1,10 +1,14 @@
 package com.example.kilivana_driver.ui.screens.dashboard
 
 import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.lifecycle.viewModelScope
+import com.example.kilivana_driver.data.network.SessionStore
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import java.util.Calendar
+import java.util.Locale
 
 enum class ActivityType { PICKED_UP, DELIVERED }
 
@@ -21,14 +25,32 @@ data class DashboardUiState(
     val deliveriesAssigned: Int = 0,
     val estimatedTransit: String = "",
     val hasUnreadNotifications: Boolean = false,
-    val recentActivity: List<ActivityItem> = emptyList()
+    val recentActivity: List<ActivityItem> = emptyList(),
+    /** Primary profile image URL, or blank to fall back to initials. */
+    val photoUrl: String = ""
 )
 
 class DashboardViewModel : ViewModel() {
 
-    // TODO: replace sample data with the logged-in driver and real jobs from the API
-    private val _uiState = MutableStateFlow(sampleDashboardState())
-    val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+    /**
+     * The name shown in the greeting comes from the signed-in user, so it
+     * matches whoever actually logged in. Everything else still falls back to
+     * sample data until its endpoint exists (see [sampleDashboardState]).
+     */
+    val uiState: StateFlow<DashboardUiState> = SessionStore.currentUser
+        .map { user ->
+            val sample = sampleDashboardState()
+            sample.copy(
+                greeting = currentGreeting(),
+                driverName = user?.name.orEmpty().ifBlank { "Driver" },
+                driverId = user?.let { "DRV-%04d".format(Locale.US, it.id) }.orEmpty()
+            )
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = sampleDashboardState()
+        )
 }
 
 private fun currentGreeting(): String {
@@ -42,8 +64,10 @@ private fun currentGreeting(): String {
 
 internal fun sampleDashboardState() = DashboardUiState(
     greeting = currentGreeting(),
-    driverName = "James",
-    driverId = "DRI-0042",
+    // Name/id are overridden per signed-in user by the ViewModel; the rest is
+    // still placeholder until the jobs endpoints exist.
+    driverName = "",
+    driverId = "",
     deliveriesAssigned = 2,
     estimatedTransit = "4h 15m",
     hasUnreadNotifications = true,

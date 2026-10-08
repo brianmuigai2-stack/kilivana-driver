@@ -30,18 +30,28 @@ import androidx.compose.material.icons.outlined.Work
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBlue
 import com.example.kilivana_driver.ui.theme.KilivanaBlueTint
@@ -159,7 +169,14 @@ private fun DashboardHeader(
             .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 64.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // TODO: load the driver's photo from the API (Coil); initials for now
+            // Avatar: the driver's profile photo when one has been uploaded,
+            // otherwise their initials. Same fallback as the profile header.
+            val context = LocalContext.current
+            val photoUrl = uiState.photoUrl
+            val imageError = remember { mutableStateOf(false) }
+            // A fresh URL means a fresh image to load, so clear any stale
+            // error from the previous photo.
+            LaunchedEffect(photoUrl) { imageError.value = false }
             Box(
                 modifier = Modifier
                     .size(56.dp)
@@ -168,12 +185,27 @@ private fun DashboardHeader(
                     .border(2.dp, KilivanaWhite.copy(alpha = 0.7f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = uiState.driverName.take(1).uppercase(),
-                    color = KilivanaWhite,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                if (photoUrl.isNotBlank() && !imageError.value) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(photoUrl)
+                            .diskCachePolicy(CachePolicy.DISABLED)
+                            .build(),
+                        contentDescription = "Driver photo",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        error = ColorPainter(Color.Transparent),
+                        onError = { imageError.value = true }
+                    )
+                }
+                if (photoUrl.isBlank() || imageError.value) {
+                    Text(
+                        text = uiState.driverName.take(1).uppercase(),
+                        color = KilivanaWhite,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(14.dp))
