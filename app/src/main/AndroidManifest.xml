@@ -9,6 +9,12 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Android 13+: needed before NotificationHelper can post job alerts -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android 12+ (API 31): required for foreground location service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Android 14+ (API 34): foreground service location access consent -->
+    <!-- ACCESS_BACKGROUND_LOCATION is NOT requested — tracking only runs
+         during active user-initiated deliveries via foreground service. -->
 
     <!--
          KilivanaApp is the Application class: it installs the API client,
@@ -49,6 +55,16 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
+        <!-- Foreground service for continuous GPS tracking during active deliveries.
+             android:foregroundServiceType="location" is required on Android 12+ (API 31).
+             android:exported="false" because only this app starts it. -->
+        <service
+            android:name=".tracking.LocationTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location"
+            tools:targetApi="31" />
+
     </application>
 
 </manifest>
