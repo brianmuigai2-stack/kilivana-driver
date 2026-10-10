@@ -67,6 +67,27 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * The Home tab — the first screen a driver sees after login.
+ *
+ * Everything here is rendered from [DashboardUiState], which
+ * [DashboardViewModel] produces. The screen never talks to the
+ * network itself; it just calls the `on...Click` callbacks that
+ * [MainScreen] passes in to switch tabs or open other screens.
+ *
+ * Layout, top to bottom:
+ * 1. A full-bleed green header (greeting, avatar, notification bell,
+ *    Driver ID + date pills). It paints behind the status bar.
+ * 2. "Today's schedule" card, pulled UP over the header's rounded
+ *    bottom edge (see [pullUp]) so it looks tucked under the band.
+ * 3. Four Quick Actions in a 2x2 grid.
+ * 4. Recent Activity — a vertical list of pickup/delivery events.
+ *
+ * The greeting, driver name, ID and avatar photo come from the
+ * signed-in user; the schedule numbers and activity items are
+ * still sample data (see [sampleDashboardState]) until the jobs
+ * endpoints exist.
+ */
 @Composable
 fun DashboardScreen(
     uiState: DashboardUiState,
@@ -77,6 +98,9 @@ fun DashboardScreen(
     onProfileClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Today's date, computed once per composition. Note: a driver
+    // who leaves the app open overnight won't see the date roll
+    // over, because remember{} keeps the first value.
     val dateLabel = remember {
         SimpleDateFormat("EEE, d MMM", Locale.getDefault()).format(Date())
     }
@@ -94,7 +118,10 @@ fun DashboardScreen(
             onNotificationsClick = onNotificationsClick
         )
 
-        // The schedule card floats over the bottom edge of the header
+        // The schedule card floats over the bottom edge of the header.
+        // pullUp shifts it up by 44.dp and shrinks its reported height
+        // by the same amount, so everything after it flows as if the
+        // card were a normal (non-overlapping) card.
         Box(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
@@ -109,6 +136,8 @@ fun DashboardScreen(
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             SectionTitle(text = "Quick Actions", topSpace = 20.dp)
 
+            // 2x2 grid: each Row is weighted so both cards share the
+            // width equally regardless of label length.
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 QuickActionCard("My Jobs", Icons.Outlined.Work, onMyJobsClick, Modifier.weight(1f))
                 QuickActionCard("Map Route", Icons.Outlined.Map, onMapRouteClick, Modifier.weight(1f))
@@ -128,6 +157,8 @@ fun DashboardScreen(
                     fontSize = 14.sp
                 )
             } else {
+                // Spacer between rows rather than Arrangement.spacedBy,
+                // because the list lives inside a plain Column.
                 uiState.recentActivity.forEachIndexed { index, item ->
                     if (index > 0) Spacer(modifier = Modifier.height(12.dp))
                     ActivityRow(item = item)
@@ -139,21 +170,46 @@ fun DashboardScreen(
     }
 }
 
-/** Pulls a composable up over the one above it, without leaving a gap below. */
+/**
+ * Custom layout modifier that pulls a composable UP over whatever
+ * is above it, without leaving a gap below it.
+ *
+ * How it works: measure the child as usual, then report to the
+ * parent a height that is `amount` shorter, and place the child
+ * `amount` pixels higher than its reported box. Visually the child
+ * overlaps the previous sibling by `amount`; the parent (and every
+ * sibling after) behaves as though the child were `amount` shorter,
+ * so nothing gets pushed down twice.
+ *
+ * Used to make the schedule card overlap the green header's
+ * rounded bottom corners instead of butting against them.
+ */
 private fun Modifier.pullUp(amount: Dp): Modifier = layout { measurable, constraints ->
     val placeable = measurable.measure(constraints)
+    // Never overlap more than the child's own height — a negative
+    // reported height would crash the layout.
     val overlap = amount.roundToPx().coerceAtMost(placeable.height)
     layout(placeable.width, placeable.height - overlap) {
         placeable.place(0, -overlap)
     }
 }
 
+/** Maps the greeting text from [DashboardViewModel] to a matching emoji. */
 private fun greetingEmoji(greeting: String): String = when {
     greeting.contains("morning", ignoreCase = true) -> "☀️"
     greeting.contains("afternoon", ignoreCase = true) -> "🌤️"
     else -> "🌙"
 }
 
+/**
+ * The green band at the top: avatar, greeting + driver name, the
+ * notification bell (with a red dot while anything is unread), and
+ * the Driver ID / date pills.
+ *
+ * It clips itself with rounded BOTTOM corners and adds 64.dp of
+ * bottom padding — that padding is the space the schedule card
+ * overlaps into (via [pullUp] in [DashboardScreen]).
+ */
 @Composable
 private fun DashboardHeader(
     uiState: DashboardUiState,
@@ -173,6 +229,8 @@ private fun DashboardHeader(
             // otherwise their initials. Same fallback as the profile header.
             val context = LocalContext.current
             val photoUrl = uiState.photoUrl
+            // Tracks a failed image load so we can fall back to initials
+            // instead of showing a broken image icon.
             val imageError = remember { mutableStateOf(false) }
             // A fresh URL means a fresh image to load, so clear any stale
             // error from the previous photo.
@@ -189,16 +247,22 @@ private fun DashboardHeader(
                     AsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(photoUrl)
+                            // No disk cache: a freshly uploaded photo must
+                            // replace the old one here immediately, even
+                            // though the URL is the same.
                             .diskCachePolicy(CachePolicy.DISABLED)
                             .build(),
                         contentDescription = "Driver photo",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
+                        // A transparent error painter keeps the box empty
+                        // so the initials branch below can take over.
                         error = ColorPainter(Color.Transparent),
                         onError = { imageError.value = true }
                     )
                 }
                 if (photoUrl.isBlank() || imageError.value) {
+                    // Fallback: first letter of the driver's name.
                     Text(
                         text = uiState.driverName.take(1).uppercase(),
                         color = KilivanaWhite,
@@ -225,6 +289,9 @@ private fun DashboardHeader(
                 )
             }
 
+            // Notification bell. The red dot is a separate Box layered on
+            // the top-end corner, with a green "border" ring that fakes
+            // a cut-out from the green button behind it.
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -255,6 +322,7 @@ private fun DashboardHeader(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Semi-transparent white pills: Driver ID and today's date.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HeaderPill(text = "Driver ID: ${uiState.driverId}")
             HeaderPill(text = dateLabel)
@@ -262,6 +330,7 @@ private fun DashboardHeader(
     }
 }
 
+/** A small translucent-white label chip used inside the green header. */
 @Composable
 private fun HeaderPill(text: String) {
     Box(
@@ -279,6 +348,13 @@ private fun HeaderPill(text: String) {
     }
 }
 
+/**
+ * "Today's schedule" card: how many deliveries are assigned and the
+ * estimated transit time. Both values are sample data for now.
+ *
+ * The headline pluralises properly for 0 / 1 / many, and the transit
+ * line only shows when there is actually a delivery to transit.
+ */
 @Composable
 private fun ScheduleCard(
     deliveries: Int,
@@ -327,6 +403,7 @@ private fun ScheduleCard(
 
         Spacer(modifier = Modifier.width(12.dp))
 
+        // Decorative delivery-truck icon on the right.
         Box(
             modifier = Modifier
                 .size(56.dp)
@@ -344,6 +421,7 @@ private fun ScheduleCard(
     }
 }
 
+/** A bold section heading with breathing room above and below. */
 @Composable
 private fun SectionTitle(
     text: String,
@@ -359,6 +437,10 @@ private fun SectionTitle(
     Spacer(modifier = Modifier.height(12.dp))
 }
 
+/**
+ * One tile of the Quick Actions grid: a tinted icon in a rounded
+ * square above a label. The whole card is clickable.
+ */
 @Composable
 private fun QuickActionCard(
     label: String,
@@ -399,6 +481,14 @@ private fun QuickActionCard(
     }
 }
 
+/**
+ * One row of the Recent Activity list.
+ *
+ * The icon, icon tint and icon background all come from the
+ * [ActivityType]: a truck for "picked up" (green) and a check
+ * mark for "delivered" (blue). [ActivityItem] carries the
+ * display strings, so no date formatting happens here.
+ */
 @Composable
 private fun ActivityRow(item: ActivityItem) {
     val icon: ImageVector
@@ -457,6 +547,8 @@ private fun ActivityRow(item: ActivityItem) {
     }
 }
 
+// Preview renders the screen with the sample data from DashboardViewModel,
+// so what you see in the layout editor is close to the real first run.
 @Preview(showSystemUi = true)
 @Composable
 private fun DashboardScreenPreview() {

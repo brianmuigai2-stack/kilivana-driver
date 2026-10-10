@@ -2,10 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Internet: every API call, OSRM routing and OpenStreetMap tile -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- GPS for the Map and En Route screens (requested at runtime) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Android 13+: needed before NotificationHelper can post job alerts -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+         KilivanaApp is the Application class: it installs the API client,
+         notification channels and Coil's image loader before any screen shows.
+    -->
     <application
         android:name=".KilivanaApp"
         android:allowBackup="true"
@@ -17,17 +25,26 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Kilivanadriver">
+
+        <!--
+             Single-activity app: MainActivity hosts every screen (splash,
+             login, main tabs). The Splash theme shows the launcher icon
+             while the app process starts, before Compose takes over.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-android:theme="@style/Theme.Kilivanadriver.Splash">
+            android:theme="@style/Theme.Kilivanadriver.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- UCrop: square-crops a picked photo before it is uploaded as
+             the profile photo (launched from MainActivity). -->
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"

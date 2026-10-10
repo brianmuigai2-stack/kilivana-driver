@@ -35,6 +35,16 @@ import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.yalantis.ucrop.UCrop
 import java.io.File
 
+/**
+ * Single activity hosting the whole app.
+ *
+ * Owns all the feature ViewModels, drives the top-level screen switch
+ * (splash → login → main), and applies the system-bar styling — the
+ * status bar scrim and icon colour have to change together, so the
+ * composables call back into [setSystemBars] rather than each painting
+ * the bar themselves. Also hosts the UCrop launcher that square-crops
+ * profile photos before they are uploaded.
+ */
 class MainActivity : ComponentActivity() {
 
     private val loginViewModel: LoginViewModel by viewModels()

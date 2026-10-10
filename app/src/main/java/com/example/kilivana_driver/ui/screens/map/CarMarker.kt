@@ -14,12 +14,24 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import kotlin.math.abs
 
+/** Below this speed (m/s) the GPS bearing is too jittery to trust. */
 private const val MIN_SPEED_FOR_GPS_BEARING = 1.5f
+/** Ignore position updates that moved less than this when computing heading. */
 private const val MIN_MOVE_METERS_FOR_HEADING = 10.0
+/** Slowest/fastest the car marker glides between two positions. */
 private const val MIN_MOVE_ANIMATION_MS = 800L
 private const val MAX_MOVE_ANIMATION_MS = 3_000L
+/** Skip redrawing the car bitmap when the heading barely changed. */
 private const val REDRAW_ANGLE_DEGREES = 4f
 
+/**
+ * Works out which way the driver is facing from a stream of GPS fixes.
+ *
+ * Preference order: the GPS's own bearing when moving fast enough, then
+ * the direction of travel between the last two fixes, then (for the very
+ * first fix) a bearing towards the destination, so the car points the
+ * right way even before it moves.
+ */
 internal class HeadingTracker {
 
     private var lastPoint: GeoPoint? = null
@@ -68,6 +80,16 @@ internal class HeadingTracker {
     }
 }
 
+/**
+ * The driver's car on the map: a small drawn vehicle that glides
+ * between GPS fixes and rotates to the heading [HeadingTracker] gives it.
+ *
+ * Movement is interpolated with a [ValueAnimator] over a duration based
+ * on how long the last update took, so the car appears to drive rather
+ * than teleport. The bitmap is re-rotated only when the heading changes
+ * by more than [REDRAW_ANGLE_DEGREES] to avoid churning bitmaps every
+ * fix.
+ */
 internal class CarMarker(
     private val mapView: MapView,
     context: Context

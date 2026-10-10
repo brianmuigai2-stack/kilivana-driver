@@ -27,6 +27,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaGreen
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
+/** The four tabs of the main screen's bottom navigation bar. */
 enum class BottomTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Outlined.Home),
     JOBS("Jobs", Icons.Outlined.Description),
@@ -34,6 +35,10 @@ enum class BottomTab(val label: String, val icon: ImageVector) {
     MORE("More", Icons.Outlined.MoreHoriz)
 }
 
+/**
+ * Bottom navigation with the four main tabs. No selected indicator
+ * pill — the icon and label just turn green.
+ */
 @Composable
 fun KilivanaBottomBar(
     selected: BottomTab,
