@@ -1,5 +1,6 @@
 package com.example.kilivana_driver.ui.screens.jobs
 
+import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -51,9 +52,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.kilivana_driver.data.model.Job
+import com.example.kilivana_driver.data.model.TripStage
 import com.example.kilivana_driver.data.routing.RouteRepository
 import com.example.kilivana_driver.ui.components.KilivanaButton
+import com.example.kilivana_driver.ui.screens.map.CarMarker
+import com.example.kilivana_driver.ui.screens.map.HeadingTracker
 import com.example.kilivana_driver.ui.screens.map.rememberUserLocation
 import com.example.kilivana_driver.ui.theme.KilivanaAmber
 import com.example.kilivana_driver.ui.theme.KilivanaAmberTint
@@ -65,6 +71,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.XYTileSource
@@ -75,7 +82,7 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 
-private enum class TripStage { HEADING_TO_PICKUP, IN_TRANSIT, DELIVERED }
+private enum class UiTripStage { HEADING_TO_PICKUP, IN_TRANSIT, DELIVERED }
 
 /*
  * OpenStreetMap requires a meaningful User-Agent. Keep this identical to
@@ -89,12 +96,6 @@ private const val DRIVER_BLUE = 0xFF3B82F6.toInt()
 private const val FARMER_GREEN = 0xFF2E7D32.toInt()
 private const val BUYER_RED = 0xFFE53935.toInt()
 
-// How far the driver has to move, and how long we wait between calls,
-// before we ask OSRM for a fresh route. Keeps the line hugging the real
-// road as the driver moves, without hammering the free routing server.
-private const val REROUTE_DISTANCE_METERS = 300.0
-private const val REROUTE_MIN_INTERVAL_MS = 15_000L
-
 @Composable
 fun JobRouteScreen(
     job: Job,
@@ -103,40 +104,56 @@ fun JobRouteScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var stage by remember { mutableStateOf(TripStage.HEADING_TO_PICKUP) }
-    var showOtpDialog by remember { mutableStateOf(false) }
-    var otpError by remember { mutableStateOf<String?>(null) }
+    val tripViewModel: TripViewModel = viewModel()
 
-    val pickupPoint = remember { GeoPoint(job.pickupLat, job.pickupLon) }
-    val dropoffPoint = remember { GeoPoint(job.dropoffLat, job.dropoffLon) }
+    // Initialize the ViewModel with the job
+    LaunchedEffect(job.id) {
+        tripViewModel.initialize(job)
+    }
 
+    // Collect state from ViewModel
+    val tripStage by tripViewModel.tripStage.collectAsStateWithLifecycle()
+    val isBusy by tripViewModel.isBusy.collectAsStateWithLifecycle()
+    val lastError by tripViewModel.lastError.collectAsStateWithLifecycle()
+    val routePoints by tripViewModel.routePoints.collectAsStateWithLifecycle()
+    val usingEstimatedRoute by tripViewModel.usingEstimatedRoute.collectAsStateWithLifecycle()
+    val distanceLabel by tripViewModel.distanceLabel.collectAsStateWithLifecycle()
+    val queueSize by tripViewModel.queueSize.collectAsStateWithLifecycle()
+
+    // Convert backend TripStage to UI stage
+    val uiStage = remember { mutableStateOf(UiTripStage.HEADING_TO_PICKUP) }
+    var hasFramedRoute by remember { mutableStateOf(false) }
+    LaunchedEffect(tripStage) {
+        uiStage.value = when (tripStage) {
+            com.example.kilivana_driver.data.model.TripStage.HEADING_TO_PICKUP -> UiTripStage.HEADING_TO_PICKUP
+            com.example.kilivana_driver.data.model.TripStage.IN_TRANSIT -> UiTripStage.IN_TRANSIT
+            com.example.kilivana_driver.data.model.TripStage.DELIVERED -> UiTripStage.DELIVERED
+            com.example.kilivana_driver.data.model.TripStage.CANCELLED -> UiTripStage.DELIVERED
+            else -> UiTripStage.HEADING_TO_PICKUP
+        }
+        // Reset framing when stage changes so it re-frames for the new route
+        hasFramedRoute = false
+    }
+
+    // GPS location stream
     val location by rememberUserLocation(enabled = true)
 
-    // Live route: driver's real position -> farmer (recalculated on the move)
-    var routeToPickup by remember { mutableStateOf<List<GeoPoint>?>(null) }
-    var lastPickupOrigin by remember { mutableStateOf<GeoPoint?>(null) }
-    var lastPickupFetchTime by remember { mutableStateOf(0L) }
+    // Fixed points
+    val pickupPoint = remember { GeoPoint(job.pickupLat, job.pickupLon) }
+    val dropoffPoint = remember { GeoPoint(job.dropoffLat, job.dropoffLon) }
+    val targetPoint = when (uiStage.value) {
+        UiTripStage.HEADING_TO_PICKUP -> pickupPoint
+        UiTripStage.IN_TRANSIT -> dropoffPoint
+        UiTripStage.DELIVERED -> dropoffPoint
+    }
 
-    // One-time overview: farmer -> buyer (shown dimmed for context before pickup)
-    var previewRouteToBuyer by remember { mutableStateOf<List<GeoPoint>?>(null) }
-
-    // Live route: driver's real position -> buyer (recalculated on the move,
-    // only kicks in once the cargo has actually been picked up)
-    var liveRouteToBuyer by remember { mutableStateOf<List<GeoPoint>?>(null) }
-    var lastBuyerOrigin by remember { mutableStateOf<GeoPoint?>(null) }
-    var lastBuyerFetchTime by remember { mutableStateOf(0L) }
-
-    var usingEstimatedRoute by remember { mutableStateOf(false) }
-    var hasFramedRoute by remember { mutableStateOf(false) }
-
+    // Map setup
     val mapView = remember {
         Configuration.getInstance().apply {
             load(context, context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
             userAgentValue = OSM_USER_AGENT
         }
 
-        // Same custom tile source as MapScreen.kt, so requests carry our
-        // User-Agent instead of the default one OSM's servers reject.
         val tileSource = XYTileSource(
             "MAPNIK",
             0,
@@ -156,6 +173,7 @@ fun JobRouteScreen(
         }
     }
 
+    // Markers
     val pickupMarker = remember {
         Marker(mapView).apply {
             position = pickupPoint
@@ -172,102 +190,93 @@ fun JobRouteScreen(
             title = job.dropoffPlace
         }
     }
-    val userMarker = remember {
-        Marker(mapView).apply {
-            icon = labeledMarkerDrawable(context, "You", DRIVER_BLUE)
-            setAnchor(0.5f, pinAnchorFraction(context))
-        }
-    }
+
+    // Car marker for smooth animation
+    val carMarker = remember { CarMarker(mapView, context) }
+
+    // Route lines
     val pickupLine = remember { Polyline().apply { outlinePaint.strokeWidth = 9f } }
     val dropoffLine = remember { Polyline().apply { outlinePaint.strokeWidth = 9f } }
 
-    // Preview overview route (farmer -> buyer), fetched once
+    // Heading tracker for vehicle rotation
+    val headingTracker = remember { HeadingTracker() }
+
+    // Preview route (farmer -> buyer) fetched once
+    var previewRouteToBuyer by remember { mutableStateOf<List<GeoPoint>?>(null) }
     LaunchedEffect(job.id) {
         val result = withContext(Dispatchers.IO) {
             RouteRepository.fetchRoute(pickupPoint, dropoffPoint)
         }
         previewRouteToBuyer = result.points
-        if (!result.isRealRoute) usingEstimatedRoute = true
+        if (!result.isRealRoute) tripViewModel._usingEstimatedRoute.value = true
     }
 
-    // Live route to the farmer: refetched whenever the driver has moved far
-    // enough, while they're still heading to pickup
-    LaunchedEffect(location, stage, job.id) {
+    // Forward GPS updates to ViewModel
+    LaunchedEffect(location) {
+        location?.let { tripViewModel.onLocationUpdate(it) }
+    }
+
+    // Update car marker position and heading
+    LaunchedEffect(location, tripViewModel) {
         val fix = location ?: return@LaunchedEffect
-        if (stage != TripStage.HEADING_TO_PICKUP) return@LaunchedEffect
-
-        val current = GeoPoint(fix.latitude, fix.longitude)
-        val origin = lastPickupOrigin
-        val now = System.currentTimeMillis()
-        val movedFar = origin == null || current.distanceToAsDouble(origin) > REROUTE_DISTANCE_METERS
-        val dueForRefresh = origin == null || now - lastPickupFetchTime > REROUTE_MIN_INTERVAL_MS
-
-        if (movedFar && dueForRefresh) {
-            lastPickupOrigin = current
-            lastPickupFetchTime = now
-            val result = withContext(Dispatchers.IO) { RouteRepository.fetchRoute(current, pickupPoint) }
-            routeToPickup = result.points
-            if (!result.isRealRoute) usingEstimatedRoute = true
-        }
+        val vehiclePos = GeoPoint(fix.latitude, fix.longitude)
+        val heading = headingTracker.update(fix, targetPoint)
+        tripViewModel.setCurrentHeading(heading)
+        carMarker.update(vehiclePos, heading)
     }
 
-    // Live route to the buyer: refetched whenever the driver has moved far
-    // enough, while the cargo is in transit
-    LaunchedEffect(location, stage, job.id) {
-        val fix = location ?: return@LaunchedEffect
-        if (stage != TripStage.IN_TRANSIT) return@LaunchedEffect
+    // Draw overlays
+    val displayedDropoffRoute = if (uiStage.value == UiTripStage.IN_TRANSIT) routePoints else previewRouteToBuyer
 
-        val current = GeoPoint(fix.latitude, fix.longitude)
-        val origin = lastBuyerOrigin
-        val now = System.currentTimeMillis()
-        val movedFar = origin == null || current.distanceToAsDouble(origin) > REROUTE_DISTANCE_METERS
-        val dueForRefresh = origin == null || now - lastBuyerFetchTime > REROUTE_MIN_INTERVAL_MS
-
-        if (movedFar && dueForRefresh) {
-            lastBuyerOrigin = current
-            lastBuyerFetchTime = now
-            val result = withContext(Dispatchers.IO) { RouteRepository.fetchRoute(current, dropoffPoint) }
-            liveRouteToBuyer = result.points
-            if (!result.isRealRoute) usingEstimatedRoute = true
-        }
-    }
-
-    val displayedDropoffRoute = liveRouteToBuyer ?: previewRouteToBuyer
-
-    // Draw / update overlays whenever anything relevant changes
-    LaunchedEffect(location, routeToPickup, displayedDropoffRoute, stage) {
+    LaunchedEffect(routePoints, displayedDropoffRoute, uiStage.value, location) {
         mapView.overlays.clear()
 
         val activeAlpha = 255
         val dimAlpha = 90
 
-        routeToPickup?.let { points ->
-            pickupLine.setPoints(points)
-            pickupLine.outlinePaint.color = KilivanaGreen.toArgb()
-            pickupLine.outlinePaint.alpha = if (stage == TripStage.HEADING_TO_PICKUP) activeAlpha else dimAlpha
-            mapView.overlays.add(pickupLine)
+        // Pickup route (green)
+        if (uiStage.value == UiTripStage.HEADING_TO_PICKUP) {
+            routePoints?.let { points ->
+                pickupLine.setPoints(points)
+                pickupLine.outlinePaint.color = KilivanaGreen.toArgb()
+                pickupLine.outlinePaint.alpha = activeAlpha
+                mapView.overlays.add(pickupLine)
+            }
+        } else if (uiStage.value == UiTripStage.IN_TRANSIT) {
+            routePoints?.let { points ->
+                pickupLine.setPoints(points)
+                pickupLine.outlinePaint.color = KilivanaGreen.toArgb()
+                pickupLine.outlinePaint.alpha = dimAlpha
+                mapView.overlays.add(pickupLine)
+            }
         }
+
+        // Dropoff route (red)
         displayedDropoffRoute?.let { points ->
             dropoffLine.setPoints(points)
             dropoffLine.outlinePaint.color = KilivanaNotificationRed.toArgb()
-            dropoffLine.outlinePaint.alpha = if (stage == TripStage.IN_TRANSIT) activeAlpha else dimAlpha
+            dropoffLine.outlinePaint.alpha = if (uiStage.value == UiTripStage.IN_TRANSIT) activeAlpha else dimAlpha
             mapView.overlays.add(dropoffLine)
         }
 
         mapView.overlays.add(pickupMarker)
         mapView.overlays.add(dropoffMarker)
 
-        location?.let { fix ->
-            userMarker.position = GeoPoint(fix.latitude, fix.longitude)
-            mapView.overlays.add(userMarker)
+        // Frame the route for the current stage only
+        val shouldFrame = when (uiStage.value) {
+            UiTripStage.HEADING_TO_PICKUP -> location != null && routePoints != null
+            UiTripStage.IN_TRANSIT -> location != null && routePoints != null
+            else -> false
         }
-
-        // Frame the whole route once we have everything, so the driver sees
-        // themselves, the farmer and the buyer all at once
-        if (!hasFramedRoute && location != null && routeToPickup != null) {
+        if (!hasFramedRoute && shouldFrame) {
             val fix = location!!
+            val targetPoint = when (uiStage.value) {
+                UiTripStage.HEADING_TO_PICKUP -> pickupPoint
+                UiTripStage.IN_TRANSIT -> dropoffPoint
+                else -> pickupPoint
+            }
             val box = BoundingBox.fromGeoPoints(
-                listOf(GeoPoint(fix.latitude, fix.longitude), pickupPoint, dropoffPoint)
+                listOf(GeoPoint(fix.latitude, fix.longitude), targetPoint)
             )
             mapView.zoomToBoundingBox(box, true, 140)
             hasFramedRoute = true
@@ -276,20 +285,13 @@ fun JobRouteScreen(
         mapView.invalidate()
     }
 
-    val distanceLabel = when (stage) {
-        TripStage.HEADING_TO_PICKUP -> routeToPickup?.let {
-            "%.1f km to farmer".format(RouteRepository.routeLengthKm(it))
-        } ?: "Finding route to farmer…"
-        TripStage.IN_TRANSIT -> displayedDropoffRoute?.let {
-            "%.1f km to buyer".format(RouteRepository.routeLengthKm(it))
-        } ?: "Finding route to buyer…"
-        TripStage.DELIVERED -> "Delivered"
-    }
+    var showOtpDialog by remember { mutableStateOf(false) }
+    var otpError by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 
-        // Top bar, floating over the map (this screen keeps dark status bar icons)
+        // Top bar
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -360,6 +362,61 @@ fun JobRouteScreen(
                     )
                 }
             }
+
+            // Offline queue indicator
+            if (queueSize > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .shadow(2.dp, RoundedCornerShape(50))
+                        .clip(RoundedCornerShape(50))
+                        .background(KilivanaAmberTint)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = KilivanaAmber,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Queued $queueSize location update(s) — will send when online",
+                        color = KilivanaAmber,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            if (lastError != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .shadow(2.dp, RoundedCornerShape(50))
+                        .clip(RoundedCornerShape(50))
+                        .background(KilivanaNotificationRed.copy(alpha = 0.1f))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = KilivanaNotificationRed,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = lastError!!,
+                        color = KilivanaNotificationRed,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
         }
 
         // Bottom status card
@@ -384,39 +441,43 @@ fun JobRouteScreen(
             Row(modifier = Modifier.fillMaxWidth()) {
                 TripStep(
                     label = "Picked Up",
-                    done = stage != TripStage.HEADING_TO_PICKUP,
+                    done = uiStage.value != UiTripStage.HEADING_TO_PICKUP,
                     current = false,
                     modifier = Modifier.weight(1f)
                 )
                 TripStep(
                     label = "In Transit",
-                    done = stage == TripStage.DELIVERED,
-                    current = stage == TripStage.IN_TRANSIT,
+                    done = uiStage.value == UiTripStage.DELIVERED,
+                    current = uiStage.value == UiTripStage.IN_TRANSIT,
                     modifier = Modifier.weight(1f)
                 )
                 TripStep(
                     label = "Delivered",
                     done = false,
-                    current = stage == TripStage.DELIVERED,
+                    current = uiStage.value == UiTripStage.DELIVERED,
                     modifier = Modifier.weight(1f)
                 )
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            when (stage) {
-                TripStage.HEADING_TO_PICKUP -> KilivanaButton(
+            when (uiStage.value) {
+                UiTripStage.HEADING_TO_PICKUP -> KilivanaButton(
                     text = "Mark as Picked Up",
-                    onClick = { stage = TripStage.IN_TRANSIT }
+                    onClick = {
+                        tripViewModel.markPickedUp()
+                    },
+                    enabled = !isBusy
                 )
-                TripStage.IN_TRANSIT -> KilivanaButton(
+                UiTripStage.IN_TRANSIT -> KilivanaButton(
                     text = "Confirm Delivery (OTP)",
                     onClick = {
                         otpError = null
                         showOtpDialog = true
-                    }
+                    },
+                    enabled = !isBusy
                 )
-                TripStage.DELIVERED -> Unit
+                UiTripStage.DELIVERED -> Unit
             }
         }
     }
@@ -429,7 +490,7 @@ fun JobRouteScreen(
                 if (entered == job.deliveryOtp) {
                     showOtpDialog = false
                     otpError = null
-                    stage = TripStage.DELIVERED
+                    tripViewModel.completeDelivery()
                     onDeliveryComplete()
                 } else {
                     otpError = "That code doesn't match. Ask the buyer to double-check it."

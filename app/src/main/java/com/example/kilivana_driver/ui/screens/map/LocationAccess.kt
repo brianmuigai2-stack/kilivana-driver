@@ -18,6 +18,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 
+/**
+ * Everything the map needs before it can show a live position.
+ *
+ * [ready] is true only when the driver has granted location permission
+ * AND the phone's location switch is on — the map screens show a
+ * prompt card instead of the map until that's the case.
+ */
 class LocationAccess(
     val hasPermission: Boolean,
     val servicesOn: Boolean,
@@ -31,6 +38,14 @@ class LocationAccess(
         get() = hasPermission && servicesOn
 }
 
+/**
+ * Tracks location permission and the location switch, re-checking both
+ * when the screen resumes so a driver who flipped the GPS switch in
+ * settings doesn't come back to a stale "location is off" card.
+ *
+ * [permanentlyDenied] distinguishes "don't ask again" (send the driver
+ * to app settings) from a normal denial (ask again).
+ */
 @Composable
 fun rememberLocationAccess(): LocationAccess {
 

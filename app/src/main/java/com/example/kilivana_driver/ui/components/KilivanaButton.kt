@@ -16,6 +16,12 @@ import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
+/**
+ * The app's full-width primary button, in Kilivana green.
+ *
+ * Swaps its label for a spinner while [isLoading] is true and ignores
+ * taps (the caller's onClick is not invoked again until it finishes).
+ */
 @Composable
 fun KilivanaButton(
     text: String,

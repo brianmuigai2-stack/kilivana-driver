@@ -23,6 +23,8 @@ object NotificationHelper {
 
     private const val CHANNEL_SOUND_ID = "job_alerts_sound"
     private const val CHANNEL_SILENT_ID = "job_alerts_silent"
+    /** Channel for the persistent delivery tracking foreground service notification. */
+    const val CHANNEL_TRACKING_ID = "delivery_tracking"
     private const val CHANNEL_NAME = "Job alerts"
     private const val NOTIFICATION_ID = 1001
 
@@ -47,6 +49,16 @@ object NotificationHelper {
                 description = "New jobs, pickups and payments (silent)"
                 setSound(null, null)
                 enableVibration(false)
+            }
+        )
+
+        // Low-importance channel for the persistent delivery tracking notification.
+        // It stays in the notification shade without sound/vibration.
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_TRACKING_ID, "Delivery Tracking", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Shows when a delivery is being actively tracked"
+                setShowBadge(false)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PRIVATE
             }
         )
     }

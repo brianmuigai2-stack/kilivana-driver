@@ -19,6 +19,11 @@ import com.example.kilivana_driver.ui.theme.KilivanaGreen
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
+/**
+ * Single-line text field with the app's look: white fill, 14dp corners,
+ * green focus ring and error tint. Everything (label, placeholder, icons,
+ * keyboard behaviour) is optional so screens pass only what they need.
+ */
 @Composable
 fun KilivanaTextField(
     value: String,

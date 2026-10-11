@@ -14,8 +14,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.example.kilivana_driver.data.model.Driver
 import com.example.kilivana_driver.data.model.JobStatus
+import com.example.kilivana_driver.tracking.LocationTrackingService
 import com.example.kilivana_driver.ui.components.BottomTab
 import com.example.kilivana_driver.ui.components.KilivanaBottomBar
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardScreen
@@ -67,6 +69,7 @@ fun MainScreen(
     onDismissUploadMessage: () -> Unit = {},
     onSetSystemBars: (darkHeader: Boolean, greenBand: Boolean) -> Unit = { _, _ -> }
 ) {
+    val context = LocalContext.current
     var selectedTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
     var selectedJobId by rememberSaveable { mutableStateOf<String?>(null) }
     var activeTripJobId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -113,6 +116,15 @@ fun MainScreen(
     // status bar is painted green while any of them is showing.
     val greenBandVisible = showSettings || showPersonalInfo ||
         showVehicleDetails || showProfileImages
+
+    // Start/stop the foreground tracking service when a trip starts/ends.
+    LaunchedEffect(activeTripJobId) {
+        activeTripJobId?.let { tripId ->
+            LocationTrackingService.startTracking(context, tripId)
+        } ?: run {
+            LocationTrackingService.stopTracking(context)
+        }
+    }
 
     // One call, not two: the status bar scrim and the icon appearance have to be
     // applied together, or whichever effect runs last wins and they fight.
