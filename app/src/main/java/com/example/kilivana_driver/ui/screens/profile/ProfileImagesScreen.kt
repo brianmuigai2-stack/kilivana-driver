@@ -205,7 +205,7 @@ private fun ImageTile(
             contentScale = ContentScale.Crop
         )
 
-        if (image.isPrimary) {
+        if (image.isPrimary == true) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)

@@ -26,25 +26,25 @@ import java.util.Locale
 data class DeliveryJob(
     val id: Long = 0L,
     val orderId: Long = 0L,
-    val pickupAddress: String = "",
-    val destinationAddress: String = "",
+    val pickupAddress: String? = null,
+    val destinationAddress: String? = null,
     val pickupLatitude: Double = 0.0,
     val pickupLongitude: Double = 0.0,
     val destinationLatitude: Double = 0.0,
     val destinationLongitude: Double = 0.0,
-    val cargoDescription: String = "",
+    val cargoDescription: String? = null,
     val quantity: Int = 0,
     val payoutAmount: Double = 0.0,
-    val scheduledPickupAt: String = "",
-    val scheduledDropoffAt: String = "",
+    val scheduledPickupAt: String? = null,
+    val scheduledDropoffAt: String? = null,
     val distanceKm: Double = 0.0,
     val estimatedMinutes: Int = 0,
-    val deliveryOtpHash: String = "",
-    val deliveryOtpExpiresAt: String = "",
-    val deliveryOtpVerified: Boolean = false,
+    val deliveryOtpHash: String? = null,
+    val deliveryOtpExpiresAt: String? = null,
+    val deliveryOtpVerified: Boolean? = null,
     val deliveryOtpAttempts: Int = 0,
-    val deliveryOtpLockedUntil: String = "",
-    val status: String = "",
+    val deliveryOtpLockedUntil: String? = null,
+    val status: String? = null,
     val driverId: Long = 0L,
     /** Null when the job has not been cancelled; present only on cancellations. */
     val cancellationReason: String? = null,
@@ -58,20 +58,23 @@ data class DeliveryJob(
      * - pending_assignment / assigned / accepted → AVAILABLE / ACCEPTED
      * - completed / delivered → COMPLETED
      * - anything else → AVAILABLE (safe default; the UI filters by tab)
+     *
+     * Nullable fields from the backend are coalesced to blank strings here
+     * so the UI [Job] model stays non-nullable.
      */
     fun toDomain(): Job = Job(
         id = id.toString(),
-        pickupLocation = pickupAddress,
-        pickupPlace = pickupAddress,
+        pickupLocation = pickupAddress ?: "",
+        pickupPlace = pickupAddress ?: "",
         pickupTime = formatTime(scheduledPickupAt),
         pickupLat = pickupLatitude,
         pickupLon = pickupLongitude,
-        dropoffLocation = destinationAddress,
-        dropoffPlace = destinationAddress,
+        dropoffLocation = destinationAddress ?: "",
+        dropoffPlace = destinationAddress ?: "",
         dropoffTime = formatTime(scheduledDropoffAt),
         dropoffLat = destinationLatitude,
         dropoffLon = destinationLongitude,
-        cargo = cargoDescription,
+        cargo = cargoDescription ?: "",
         quantity = if (quantity > 0) "$quantity kg" else "",
         distanceKm = distanceKm.roundToInt(),
         estimatedTime = formatMinutes(estimatedMinutes),
@@ -82,7 +85,7 @@ data class DeliveryJob(
         isNew = false
     )
 
-    private fun mapStatus(backendStatus: String): JobStatus = when (backendStatus.lowercase()) {
+    private fun mapStatus(backendStatus: String?): JobStatus = when (backendStatus?.lowercase()) {
         "pending_assignment", "available", "unassigned" -> JobStatus.AVAILABLE
         "assigned", "accepted", "picked_up", "in_transit", "in_progress",
         "en_route_to_buyer", "en_route_to_dropoff" -> JobStatus.ACCEPTED
@@ -90,8 +93,8 @@ data class DeliveryJob(
         else -> JobStatus.AVAILABLE
     }
 
-    private fun formatTime(isoTimestamp: String): String {
-        if (isoTimestamp.isBlank()) return ""
+    private fun formatTime(isoTimestamp: String?): String {
+        if (isoTimestamp.isNullOrBlank()) return ""
         return runCatching {
             val instant = Instant.parse(isoTimestamp)
             val zoned = instant.atZone(ZoneId.systemDefault())

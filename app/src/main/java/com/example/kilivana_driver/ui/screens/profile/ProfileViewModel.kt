@@ -37,7 +37,7 @@ data class ProfileUiState(
     val needsProfile: Boolean = false
 ) {
     val primaryImage: DriverImage?
-        get() = images.firstOrNull { it.isPrimary } ?: images.minByOrNull { it.sortOrder }
+        get() = images.firstOrNull { it.isPrimary == true } ?: images.minByOrNull { it.sortOrder }
 }
 
 class ProfileViewModel(application: Application) : AndroidViewModel(application) {

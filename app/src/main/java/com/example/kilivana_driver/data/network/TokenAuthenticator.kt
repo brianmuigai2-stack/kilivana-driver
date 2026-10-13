@@ -79,7 +79,7 @@ class TokenAuthenticator(
             }
 
             val data = refreshed.data
-            if (!refreshed.success || data == null || data.accessToken.isBlank()) {
+            if (refreshed.success == false || data == null || data.accessToken.isBlank()) {
                 endSession()
                 return@withLock null
             }

@@ -71,7 +71,7 @@ class JobsRepository(
                 Result.failure(
                     JobsException(JobsErrorType.SERVER_DOWN, "Request timed out — check your connection")
                 )
-            } else if (response.success) {
+            } else if (response.success != false) {
                 Result.success(response.data.orEmpty())
             } else {
                 Result.failure(
@@ -105,7 +105,7 @@ class JobsRepository(
         block: suspend () -> ApiResponse<T>
     ): Result<T> = try {
         val response = block()
-        if (response.success && response.data != null) {
+        if (response.success != false && response.data != null) {
             Result.success(response.data)
         } else {
             Result.failure(JobsException(JobsErrorType.OTHER, describe(response.error, response.message)))
