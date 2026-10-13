@@ -52,6 +52,7 @@ fun MainScreen(
     onJobStatusSelected: (JobStatus) -> Unit,
     onAcceptJob: (String) -> Unit,
     onCompleteJob: (String) -> Unit,
+    onRefreshJobs: () -> Unit,
     onPushNotificationsChange: (Boolean) -> Unit,
     onNotificationSoundChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
@@ -245,11 +246,12 @@ fun MainScreen(
                             },
                             onProfileClick = { selectedTab = BottomTab.MORE }
                         )
-                        BottomTab.JOBS -> JobsScreen(
+                         BottomTab.JOBS -> JobsScreen(
                             uiState = jobsState,
                             onStatusSelected = onJobStatusSelected,
                             onFilterClick = { /* TODO: filter sheet */ },
-                            onJobClick = { job -> selectedJobId = job.id }
+                            onJobClick = { job -> selectedJobId = job.id },
+                            onRefresh = onRefreshJobs
                         )
                         BottomTab.MAP -> MapScreen(
                             activeJob = acceptedJob,

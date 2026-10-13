@@ -119,6 +119,7 @@ fun JobRouteScreen(
     val usingEstimatedRoute by tripViewModel.usingEstimatedRoute.collectAsStateWithLifecycle()
     val distanceLabel by tripViewModel.distanceLabel.collectAsStateWithLifecycle()
     val queueSize by tripViewModel.queueSize.collectAsStateWithLifecycle()
+    val trackingPoints by tripViewModel.trackingPoints.collectAsStateWithLifecycle()
 
     // Convert backend TripStage to UI stage
     val uiStage = remember { mutableStateOf(UiTripStage.HEADING_TO_PICKUP) }
@@ -197,6 +198,12 @@ fun JobRouteScreen(
     // Route lines
     val pickupLine = remember { Polyline().apply { outlinePaint.strokeWidth = 9f } }
     val dropoffLine = remember { Polyline().apply { outlinePaint.strokeWidth = 9f } }
+    val trackingLine = remember {
+        Polyline().apply {
+            outlinePaint.strokeWidth = 12f
+            outlinePaint.color = KilivanaTextMuted.copy(alpha = 0.5f).toArgb()
+        }
+    }
 
     // Heading tracker for vehicle rotation
     val headingTracker = remember { HeadingTracker() }
@@ -228,7 +235,7 @@ fun JobRouteScreen(
     // Draw overlays
     val displayedDropoffRoute = if (uiStage.value == UiTripStage.IN_TRANSIT) routePoints else previewRouteToBuyer
 
-    LaunchedEffect(routePoints, displayedDropoffRoute, uiStage.value, location) {
+    LaunchedEffect(routePoints, displayedDropoffRoute, uiStage.value, location, trackingPoints) {
         mapView.overlays.clear()
 
         val activeAlpha = 255
@@ -257,6 +264,15 @@ fun JobRouteScreen(
             dropoffLine.outlinePaint.color = KilivanaNotificationRed.toArgb()
             dropoffLine.outlinePaint.alpha = if (uiStage.value == UiTripStage.IN_TRANSIT) activeAlpha else dimAlpha
             mapView.overlays.add(dropoffLine)
+        }
+
+        // Tracking history (dotted gray line from the backend)
+        if (trackingPoints.isNotEmpty()) {
+            val geoPoints = trackingPoints.map { GeoPoint(it.latitude, it.longitude) }
+            trackingLine.setPoints(geoPoints)
+            trackingLine.outlinePaint.color = KilivanaTextMuted.toArgb()
+            trackingLine.outlinePaint.alpha = 180
+            mapView.overlays.add(trackingLine)
         }
 
         mapView.overlays.add(pickupMarker)

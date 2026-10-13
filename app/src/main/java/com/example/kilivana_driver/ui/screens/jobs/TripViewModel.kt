@@ -7,8 +7,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.LocationUpdate
 import com.example.kilivana_driver.data.model.TrackingConfig
+import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import com.example.kilivana_driver.data.model.TripStage
 import com.example.kilivana_driver.data.model.UploadResult
+import com.example.kilivana_driver.data.network.JobsRepository
 import com.example.kilivana_driver.data.network.LocationRepository
 import com.example.kilivana_driver.data.network.SessionStore
 import com.example.kilivana_driver.data.network.TripRepository
@@ -40,6 +42,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
 
     private val locationRepository = LocationRepository()
     private val tripRepository = TripRepository(locationRepository = locationRepository)
+    private val jobsRepository = JobsRepository()
     private val trackingConfig = TrackingConfig.DEFAULT
 
     // ---- Inputs from the screen ----
@@ -87,6 +90,14 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     /** Offline queue size (for diagnostics). */
     val queueSize: StateFlow<Int> = locationRepository.queueSize
 
+    /** GPS fixes the driver uploaded for this job, fetched from GET /tracking. */
+    private val _trackingPoints = MutableStateFlow<List<TrackingHistoryPoint>>(emptyList())
+    val trackingPoints: StateFlow<List<TrackingHistoryPoint>> = _trackingPoints.asStateFlow()
+
+    /** Last error from a tracking-history fetch, if any. */
+    private val _trackingError = MutableStateFlow<String?>(null)
+    val trackingError: StateFlow<String?> = _trackingError.asStateFlow()
+
     // ---- Heading/animation state (mirrors CarMarker logic) ----
     private var lastLocationForHeading: GeoPoint? = null
     private var _currentHeading = 0f
@@ -97,6 +108,21 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         _job = job
         _targetGeoPoint = GeoPoint(job.pickupLat, job.pickupLon)
         _distanceLabel.value = "Finding route to farmer…"
+        loadTrackingHistory(job.id)
+    }
+
+    /** Fetches the GPS tracking history for this job from the backend. */
+    private fun loadTrackingHistory(jobId: String) {
+        val id = jobId.toLongOrNull() ?: return
+        viewModelScope.launch {
+            val result = jobsRepository.getTrackingHistory(id)
+            if (result.isSuccess) {
+                _trackingPoints.value = result.getOrNull().orEmpty()
+                _trackingError.value = null
+            } else {
+                _trackingError.value = result.exceptionOrNull()?.message
+            }
+        }
     }
 
     /** Called by the screen when a new GPS fix arrives. */

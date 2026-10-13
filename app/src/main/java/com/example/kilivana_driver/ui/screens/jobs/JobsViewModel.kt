@@ -1,16 +1,22 @@
 package com.example.kilivana_driver.ui.screens.jobs
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.JobStatus
+import com.example.kilivana_driver.data.network.JobsRepository
+import com.example.kilivana_driver.data.network.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 data class JobsUiState(
     val selectedStatus: JobStatus = JobStatus.AVAILABLE,
-    val jobs: List<Job> = emptyList()
+    val jobs: List<Job> = emptyList(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null
 ) {
     val visibleJobs: List<Job>
         get() = jobs.filter { it.status == selectedStatus }
@@ -18,11 +24,71 @@ data class JobsUiState(
     fun countFor(status: JobStatus): Int = jobs.count { it.status == status }
 }
 
-class JobsViewModel : ViewModel() {
+/**
+ * ViewModel for the Jobs tab.
+ *
+ * Loads delivery jobs from the backend via [JobsRepository] once a driver is
+ * signed in, following the same watch-session pattern as [ProfileViewModel]:
+ * when SessionStore.currentUser changes, jobs are reloaded. This keeps the job
+ * list fresh across login/logout without a manual refresh call.
+ *
+ * The backend returns [DeliveryJob] objects (serializable, API field names);
+ * [DeliveryJob.toDomain] maps each one to the UI-friendly [Job] model the
+ * composables already consume.
+ */
+class JobsViewModel(
+    private val jobsRepository: JobsRepository = JobsRepository()
+) : ViewModel() {
 
-    // TODO: replace sample data with jobs from the API
-    private val _uiState = MutableStateFlow(JobsUiState(jobs = sampleJobs()))
+    private val _uiState = MutableStateFlow(JobsUiState(isLoading = true))
     val uiState: StateFlow<JobsUiState> = _uiState.asStateFlow()
+
+    init {
+        // Created at activity launch, before the driver may have logged in,
+        // so watch the session and load once it's populated.
+        viewModelScope.launch {
+            SessionStore.currentUser.collect { user ->
+                if (user != null) refresh()
+            }
+        }
+    }
+
+    /** Fetches jobs from the backend and updates the UI state. */
+    fun refresh() {
+        if (_uiState.value.isLoading) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val result = jobsRepository.getJobs()
+            if (result.isSuccess) {
+                val jobs = result.getOrNull().orEmpty().map { it.toDomain() }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        jobs = jobs,
+                        errorMessage = null
+                    )
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = result.exceptionOrNull()?.message
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Fetches a single delivery job by its backend ID.
+     *
+     * Used when a job is opened directly (e.g. from a notification deep link)
+     * rather than from the jobs list, so the detail screen always shows fresh
+     * data instead of a stale list entry.
+     */
+    suspend fun getJob(id: Long): Result<Job> = runCatching {
+        jobsRepository.getJob(id).getOrThrow().toDomain()
+    }
 
     fun onStatusSelected(status: JobStatus) {
         _uiState.update { it.copy(selectedStatus = status) }

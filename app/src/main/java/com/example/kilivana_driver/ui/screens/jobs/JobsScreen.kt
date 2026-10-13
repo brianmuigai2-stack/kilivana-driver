@@ -24,11 +24,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +69,7 @@ fun JobsScreen(
     onStatusSelected: (JobStatus) -> Unit,
     onFilterClick: () -> Unit,
     onJobClick: (Job) -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val visibleJobs = uiState.visibleJobs
@@ -75,7 +80,7 @@ fun JobsScreen(
             .background(KilivanaBackground)
     ) {
         KilivanaStatusBarScrim()
-        JobsHeader(onFilterClick = onFilterClick)
+        JobsHeader(onFilterClick = onFilterClick, onRefresh = onRefresh)
 
         Row(
             modifier = Modifier
@@ -97,11 +102,37 @@ fun JobsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (visibleJobs.isEmpty()) {
-                item { EmptyState(status = uiState.selectedStatus) }
-            } else {
-                items(visibleJobs, key = { it.id }) { job ->
-                    JobCard(job = job, onClick = { onJobClick(job) })
+            when {
+                uiState.isLoading -> {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillParentMaxSize()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = KilivanaGreen)
+                        }
+                    }
+                }
+
+                visibleJobs.isEmpty() -> {
+                    item {
+                        if (uiState.errorMessage != null) {
+                            ErrorState(
+                                error = uiState.errorMessage,
+                                onRetry = onRefresh
+                            )
+                        } else {
+                            EmptyState(status = uiState.selectedStatus)
+                        }
+                    }
+                }
+
+                else -> {
+                    items(visibleJobs, key = { it.id }) { job ->
+                        JobCard(job = job, onClick = { onJobClick(job) })
+                    }
                 }
             }
         }
@@ -109,7 +140,10 @@ fun JobsScreen(
 }
 
 @Composable
-private fun JobsHeader(onFilterClick: () -> Unit) {
+private fun JobsHeader(
+    onFilterClick: () -> Unit,
+    onRefresh: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -123,6 +157,26 @@ private fun JobsHeader(onFilterClick: () -> Unit) {
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold
         )
+
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .shadow(2.dp, CircleShape)
+                .clip(CircleShape)
+                .background(KilivanaWhite)
+                .clickable(onClick = onRefresh),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Refresh,
+                contentDescription = "Refresh jobs",
+                tint = KilivanaTextPrimary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
         Box(
             modifier = Modifier
                 .size(44.dp)
@@ -375,6 +429,42 @@ private fun EmptyState(status: JobStatus) {
     }
 }
 
+@Composable
+private fun ErrorState(
+    error: String,
+    onRetry: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 64.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Refresh,
+            contentDescription = null,
+            tint = KilivanaNotificationRed,
+            modifier = Modifier.size(40.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = error,
+            color = KilivanaTextMuted,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        TextButton(onClick = onRetry) {
+            Text(
+                text = "Retry",
+                color = KilivanaGreen,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
 internal fun formatKsh(amount: Int): String = "KSh %,d".format(Locale.US, amount)
 
 @Preview(showSystemUi = true)
@@ -385,7 +475,8 @@ private fun JobsScreenPreview() {
             uiState = JobsUiState(jobs = sampleJobs()),
             onStatusSelected = {},
             onFilterClick = {},
-            onJobClick = {}
+            onJobClick = {},
+            onRefresh = {}
         )
     }
 }
@@ -398,7 +489,8 @@ private fun JobsScreenEmptyPreview() {
             uiState = JobsUiState(selectedStatus = JobStatus.ACCEPTED, jobs = sampleJobs()),
             onStatusSelected = {},
             onFilterClick = {},
-            onJobClick = {}
+            onJobClick = {},
+            onRefresh = {}
         )
     }
 }
