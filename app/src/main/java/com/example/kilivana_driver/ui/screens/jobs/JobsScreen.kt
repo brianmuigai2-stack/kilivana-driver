@@ -1,5 +1,11 @@
 package com.example.kilivana_driver.ui.screens.jobs
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,14 +40,18 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.Job
@@ -104,15 +114,8 @@ fun JobsScreen(
         ) {
             when {
                 uiState.isLoading -> {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillParentMaxSize()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = KilivanaGreen)
-                        }
+                    items(6) {
+                        JobCardSkeleton()
                     }
                 }
 
@@ -462,6 +465,132 @@ private fun ErrorState(
                 fontWeight = FontWeight.SemiBold
             )
         }
+    }
+}
+
+/**
+ * A sweeping gradient brush used as the background for skeleton elements.
+ *
+ * The gradient is three stops — light gray → white → light gray — and its
+ * offsets are animated by an [InfiniteTransition] so the white band glides
+ * left-to-right, creating the shimmer known from placeholder UIs.
+ */
+@Composable
+private fun shimmerBrush(): Brush {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerProgress"
+    )
+    val span = 600f
+    val offset = progress * span * 2 - span
+    return Brush.horizontalGradient(
+        colors = listOf(
+            Color(0xFFE0E0E0),
+            Color(0xFFF5F5F5),
+            Color(0xFFE0E0E0)
+        ),
+        startX = offset,
+        endX = offset + span
+    )
+}
+
+/** A single shimmering rectangle, used as a placeholder line in skeleton cards. */
+@Composable
+private fun SkeletonBar(
+    modifier: Modifier = Modifier,
+    height: Dp = 14.dp,
+    cornerRadius: Dp = 4.dp
+) {
+    Box(
+        modifier = modifier
+            .height(height)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(shimmerBrush())
+    )
+}
+
+/**
+ * Skeleton placeholder for a [JobCard], showing the same layout as gray bars
+ * with a shimmer sweep. Shown while the jobs list is loading.
+ */
+@Composable
+private fun JobCardSkeleton(
+    modifier: Modifier = Modifier
+) {
+    val cardShape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(1.dp, cardShape)
+            .clip(cardShape)
+            .background(KilivanaWhite)
+            .padding(16.dp)
+    ) {
+        // Header: job ID placeholder + badge placeholder
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SkeletonBar(modifier = Modifier.width(100.dp), height = 18.dp)
+            SkeletonBar(
+                modifier = Modifier
+                    .width(60.dp)
+                    .height(20.dp),
+                cornerRadius = 10.dp
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Pickup route stop
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SkeletonBar(
+                modifier = Modifier.size(20.dp),
+                cornerRadius = 10.dp
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                SkeletonBar(modifier = Modifier.fillMaxWidth(0.8f), height = 14.dp)
+                Spacer(modifier = Modifier.height(6.dp))
+                SkeletonBar(modifier = Modifier.fillMaxWidth(0.5f), height = 12.dp)
+            }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Drop-off route stop
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SkeletonBar(
+                modifier = Modifier.size(20.dp),
+                cornerRadius = 10.dp
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                SkeletonBar(modifier = Modifier.fillMaxWidth(0.7f), height = 14.dp)
+                Spacer(modifier = Modifier.height(6.dp))
+                SkeletonBar(modifier = Modifier.fillMaxWidth(0.4f), height = 12.dp)
+            }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Cargo + details row
+        SkeletonBar(modifier = Modifier.fillMaxWidth(), height = 14.dp)
+        Spacer(modifier = Modifier.height(10.dp))
+        SkeletonBar(modifier = Modifier.fillMaxWidth(0.6f), height = 14.dp)
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // View details button
+        SkeletonBar(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp),
+            cornerRadius = 12.dp
+        )
     }
 }
 

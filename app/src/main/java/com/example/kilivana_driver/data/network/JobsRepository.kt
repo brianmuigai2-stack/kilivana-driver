@@ -33,13 +33,29 @@ class JobsRepository(
      *
      * Pass `page`/`size`/`sort` to control pagination; the defaults return the
      * first page of jobs sorted by creation date descending.
+     *
+     * Unlike [getJob], a `null` data field is treated as an empty list rather
+     * than an error: the backend may legitimately respond with
+     * `{"success": true, "data": null}` when the driver has no jobs, and that
+     * should render as "No jobs available" rather than a failure.
      */
     suspend fun getJobs(
         page: Int = 0,
         size: Int = 20,
         sort: List<String> = listOf("createdAt,desc")
     ): Result<List<DeliveryJob>> = withContext(ioDispatcher) {
-        runCatchingBody { api.getJobs(page, size, sort) }
+        try {
+            val response = api.getJobs(page, size, sort)
+            if (response.success) {
+                Result.success(response.data.orEmpty())
+            } else {
+                Result.failure(Exception(describe(response.error, response.message)))
+            }
+        } catch (e: HttpException) {
+            Result.failure(Exception(readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     /**
