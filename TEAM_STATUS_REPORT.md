@@ -53,7 +53,7 @@ These are source-level implementation findings, not confirmation from a device r
 - **Build/test result:** A Gradle unit-test run was attempted in this workspace, but the terminal did not provide a definitive final pass/fail marker. Treat build and test status as **unverified** until `./gradlew testDebugUnitTest assembleDebug` completes successfully.
 - **Runtime behavior:** No emulator/device run or live backend health-check result was captured during this review. GPS permissions, map tile loading, OSRM responses, login, profile upload, and Android notification behavior still need hands-on validation.
 
-## Recommended Team Priorities
+## Recommended Team Priorities...
 
 1. Confirm a stable staging API URL, then validate authentication and profile calls on a device; add tests for error parsing, session restore, and token refresh.
 2. Connect jobs, accept/decline/complete actions, history, and notifications to backend endpoints; remove hard-coded OTPs and sample production-facing records.
