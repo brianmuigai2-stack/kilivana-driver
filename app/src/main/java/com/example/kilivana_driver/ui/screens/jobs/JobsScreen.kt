@@ -34,7 +34,6 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -107,13 +106,24 @@ fun JobsScreen(
             }
         }
 
+        // Shimmering top bar while refreshing with existing jobs (pull-to-refresh style).
+        // When there are no jobs yet, skeleton cards fill the screen instead.
+        if (uiState.isLoading && visibleJobs.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .background(shimmerBrush())
+            )
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             when {
-                uiState.isLoading -> {
+                uiState.isLoading && visibleJobs.isEmpty() -> {
                     items(6) {
                         JobCardSkeleton()
                     }
