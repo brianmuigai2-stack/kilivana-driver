@@ -3,12 +3,16 @@ package com.example.kilivana_driver.data.network
 import com.example.kilivana_driver.data.model.ApiError
 import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.DeliveryJob
+import com.example.kilivana_driver.data.model.JobsErrorType
 import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import retrofit2.HttpException
 
 /**
@@ -35,6 +39,17 @@ class JobsRepository(
     private val API_TIMEOUT_MS = 30_000L
 
     /**
+     * Wraps a backend failure with a [JobsErrorType] classification so the UI
+     * can show a context-specific message ("No internet connection" vs
+     * "Server is not running" vs a generic error).
+     */
+    class JobsException(
+        val errorType: JobsErrorType,
+        message: String,
+        cause: Throwable? = null
+    ) : Exception(message, cause)
+
+    /**
      * Lists delivery jobs for the current driver (pageable).
      *
      * Pass `page`/`size`/`sort` to control pagination; the defaults return the
@@ -53,16 +68,18 @@ class JobsRepository(
         try {
             val response = withTimeoutOrNull(API_TIMEOUT_MS) { api.getJobs(page, size, sort) }
             if (response == null) {
-                Result.failure(Exception("Request timed out after ${API_TIMEOUT_MS / 1000}s"))
+                Result.failure(
+                    JobsException(JobsErrorType.SERVER_DOWN, "Request timed out — check your connection")
+                )
             } else if (response.success) {
                 Result.success(response.data.orEmpty())
             } else {
-                Result.failure(Exception(describe(response.error, response.message)))
+                Result.failure(
+                    JobsException(JobsErrorType.OTHER, describe(response.error, response.message))
+                )
             }
-        } catch (e: HttpException) {
-            Result.failure(Exception(readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"))
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(classifyException(e))
         }
     }
 
@@ -91,12 +108,40 @@ class JobsRepository(
         if (response.success && response.data != null) {
             Result.success(response.data)
         } else {
-            Result.failure(Exception(describe(response.error, response.message)))
+            Result.failure(JobsException(JobsErrorType.OTHER, describe(response.error, response.message)))
         }
-    } catch (e: HttpException) {
-        Result.failure(Exception(readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"))
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.failure(classifyException(e))
+    }
+
+    /**
+     * Inspects a raw exception and maps it to a [JobsException] with the right
+     * [JobsErrorType], so the UI can show the right message for "no internet",
+     * "server down", or a generic error.
+     *
+     * The network layer wraps the real OkHttp call in [HostFailoverInterceptor],
+     * which retries across multiple hosts and re-throws the last IOException —
+     * so the original exception subtype (UnknownHostException, ConnectException,
+     * etc.) is preserved and used here for classification.
+     */
+    private fun classifyException(e: Exception): JobsException = when (e) {
+        is UnknownHostException ->
+            JobsException(JobsErrorType.NO_INTERNET, "No internet connection", e)
+        is SocketTimeoutException ->
+            JobsException(JobsErrorType.SERVER_DOWN, "Server is taking too long to respond", e)
+        is ConnectException ->
+            JobsException(JobsErrorType.SERVER_DOWN, "Server is not running", e)
+        is HttpException -> {
+            val type = when (e.code()) {
+                in 500..599 -> JobsErrorType.SERVER_DOWN
+                else -> JobsErrorType.OTHER
+            }
+            JobsException(type, readErrorBody(e) ?: "Server responded with HTTP ${e.code()}", e)
+        }
+        is java.io.IOException ->
+            JobsException(JobsErrorType.SERVER_DOWN, "Server is not running", e)
+        else ->
+            JobsException(JobsErrorType.OTHER, e.message ?: "Something went wrong", e)
     }
 
     private fun readErrorBody(e: HttpException): String? {

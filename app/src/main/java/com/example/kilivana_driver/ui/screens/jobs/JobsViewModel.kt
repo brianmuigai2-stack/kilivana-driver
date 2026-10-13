@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.JobStatus
+import com.example.kilivana_driver.data.model.JobsErrorType
 import com.example.kilivana_driver.data.network.JobsRepository
 import com.example.kilivana_driver.data.network.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +17,8 @@ data class JobsUiState(
     val selectedStatus: JobStatus = JobStatus.AVAILABLE,
     val jobs: List<Job> = emptyList(),
     val isLoading: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val errorType: JobsErrorType? = null
 ) {
     val visibleJobs: List<Job>
         get() = jobs.filter { it.status == selectedStatus }
@@ -68,14 +70,18 @@ class JobsViewModel(
                     it.copy(
                         isLoading = false,
                         jobs = jobs,
-                        errorMessage = null
+                        errorMessage = null,
+                        errorType = null
                     )
                 }
             } else {
+                val exception = result.exceptionOrNull()
+                val errorType = (exception as? JobsRepository.JobsException)?.errorType
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        errorMessage = result.exceptionOrNull()?.message
+                        errorMessage = exception?.message,
+                        errorType = errorType
                     )
                 }
             }

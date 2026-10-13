@@ -30,8 +30,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Error
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -55,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.JobStatus
+import com.example.kilivana_driver.data.model.JobsErrorType
 import com.example.kilivana_driver.ui.theme.KilivanaAmber
 import com.example.kilivana_driver.ui.theme.KilivanaAmberTint
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
@@ -134,6 +138,7 @@ fun JobsScreen(
                         if (uiState.errorMessage != null) {
                             ErrorState(
                                 error = uiState.errorMessage,
+                                errorType = uiState.errorType,
                                 onRetry = onRefresh
                             )
                         } else {
@@ -444,9 +449,16 @@ private fun EmptyState(status: JobStatus) {
 
 @Composable
 private fun ErrorState(
-    error: String,
+    error: String?,
+    errorType: JobsErrorType?,
     onRetry: () -> Unit
 ) {
+    val (title, icon) = when (errorType) {
+        JobsErrorType.NO_INTERNET -> "No internet connection" to Icons.Outlined.WifiOff
+        JobsErrorType.SERVER_DOWN -> "Server is not running" to Icons.Outlined.CloudOff
+        else -> "Something went wrong" to Icons.Outlined.Error
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -454,14 +466,22 @@ private fun ErrorState(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
-            imageVector = Icons.Outlined.Refresh,
+            imageVector = icon,
             contentDescription = null,
             tint = KilivanaNotificationRed,
             modifier = Modifier.size(40.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = error,
+            text = title,
+            color = KilivanaTextPrimary,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = error ?: "An unexpected error occurred",
             color = KilivanaTextMuted,
             fontSize = 14.sp,
             textAlign = TextAlign.Center
@@ -626,6 +646,56 @@ private fun JobsScreenEmptyPreview() {
     KilivanaTheme {
         JobsScreen(
             uiState = JobsUiState(selectedStatus = JobStatus.ACCEPTED, jobs = sampleJobs()),
+            onStatusSelected = {},
+            onFilterClick = {},
+            onJobClick = {},
+            onRefresh = {}
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun JobsScreenLoadingPreview() {
+    KilivanaTheme {
+        JobsScreen(
+            uiState = JobsUiState(isLoading = true),
+            onStatusSelected = {},
+            onFilterClick = {},
+            onJobClick = {},
+            onRefresh = {}
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun JobsScreenNoInternetPreview() {
+    KilivanaTheme {
+        JobsScreen(
+            uiState = JobsUiState(
+                isLoading = false,
+                errorMessage = "No internet connection — check your network settings",
+                errorType = JobsErrorType.NO_INTERNET
+            ),
+            onStatusSelected = {},
+            onFilterClick = {},
+            onJobClick = {},
+            onRefresh = {}
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun JobsScreenServerDownPreview() {
+    KilivanaTheme {
+        JobsScreen(
+            uiState = JobsUiState(
+                isLoading = false,
+                errorMessage = "The backend server is currently offline. Try again in a few minutes.",
+                errorType = JobsErrorType.SERVER_DOWN
+            ),
             onStatusSelected = {},
             onFilterClick = {},
             onJobClick = {},
