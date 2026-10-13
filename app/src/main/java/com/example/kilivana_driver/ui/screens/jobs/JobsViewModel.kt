@@ -45,10 +45,13 @@ class JobsViewModel(
 
     init {
         // Created at activity launch, before the driver may have logged in,
-        // so watch the session and load once it's populated.
+        // so watch the session and load once it's populated. When the user is
+        // not signed in, clear the loading state so the spinner doesn't hang
+        // forever waiting for a login that hasn't happened yet.
         viewModelScope.launch {
             SessionStore.currentUser.collect { user ->
                 if (user != null) refresh()
+                else _uiState.update { it.copy(isLoading = false) }
             }
         }
     }

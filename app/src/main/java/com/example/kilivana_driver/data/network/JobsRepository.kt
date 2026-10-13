@@ -7,6 +7,7 @@ import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 
@@ -28,6 +29,11 @@ class JobsRepository(
 
     private val errorJson = Json { ignoreUnknownKeys = true }
 
+    /** Safety-net timeout: the OkHttp client has 15s per-host timeouts, but the
+     * HostFailoverInterceptor retries across multiple hosts, so the total can
+     * stretch to 45s+. This caps every call so the UI never hangs forever. */
+    private val API_TIMEOUT_MS = 30_000L
+
     /**
      * Lists delivery jobs for the current driver (pageable).
      *
@@ -45,8 +51,10 @@ class JobsRepository(
         sort: List<String> = listOf("createdAt,desc")
     ): Result<List<DeliveryJob>> = withContext(ioDispatcher) {
         try {
-            val response = api.getJobs(page, size, sort)
-            if (response.success) {
+            val response = withTimeoutOrNull(API_TIMEOUT_MS) { api.getJobs(page, size, sort) }
+            if (response == null) {
+                Result.failure(Exception("Request timed out after ${API_TIMEOUT_MS / 1000}s"))
+            } else if (response.success) {
                 Result.success(response.data.orEmpty())
             } else {
                 Result.failure(Exception(describe(response.error, response.message)))
