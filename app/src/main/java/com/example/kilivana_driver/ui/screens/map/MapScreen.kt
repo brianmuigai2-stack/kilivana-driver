@@ -71,6 +71,7 @@ private const val NAIROBI_LON = 36.817223
 private const val USER_ZOOM = 17.25
 private const val USER_PITCH = 45.0
 
+/** Shows the driver location on a Mapbox map, handles location access and offers resuming an active job. */
 @Composable
 fun MapScreen(
     modifier: Modifier = Modifier,

@@ -86,6 +86,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 import java.util.Locale
 
+/** Displays the driver profile and photo actions, with confirmation before invoking the logout callback. */
 @Composable
 fun ProfileScreen(
     driver: Driver,

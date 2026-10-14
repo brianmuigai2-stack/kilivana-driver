@@ -11,14 +11,17 @@ data class GeoPoint(
     val longitude: Double
 ) {
 
+    /** Converts this coordinate to a Mapbox Point using longitude before latitude. */
     fun toMapboxPoint(): Point = Point.fromLngLat(longitude, latitude)
 
     companion object {
+        /** Creates a GeoPoint from longitude followed by latitude, both in degrees. */
         fun fromLngLat(longitude: Double, latitude: Double): GeoPoint {
             return GeoPoint(latitude, longitude)
         }
     }
 
+    /** Returns the great-circle distance to the other point in meters using the haversine formula. */
     fun distanceToAsDouble(other: GeoPoint): Double {
         // Haversine formula for distance between two points in meters
         val R = 6371000.0 // Earth radius in meters
@@ -35,6 +38,7 @@ data class GeoPoint(
         return R * c
     }
 
+    /** Returns the initial bearing to the other point in degrees clockwise from north, in the range [0, 360). */
     fun bearingTo(other: GeoPoint): Double {
         val lat1 = Math.toRadians(latitude)
         val lat2 = Math.toRadians(other.latitude)

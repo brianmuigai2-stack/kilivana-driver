@@ -76,6 +76,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 import java.util.Locale
 
+/** Renders the selected job tab with loading, empty or error states, forwarding user actions to the caller. */
 @Composable
 fun JobsScreen(
     uiState: JobsUiState,
@@ -157,6 +158,7 @@ fun JobsScreen(
     }
 }
 
+/** Shows the jobs title with refresh and filter actions. */
 @Composable
 private fun JobsHeader(
     onFilterClick: () -> Unit,
@@ -447,6 +449,7 @@ private fun EmptyState(status: JobStatus) {
     }
 }
 
+/** Shows a job loading failure with a title based on its error type and a retry action. */
 @Composable
 private fun ErrorState(
     error: String?,
@@ -686,6 +689,7 @@ private fun JobsScreenNoInternetPreview() {
     }
 }
 
+/** Previews the jobs screen when the backend is unavailable. */
 @Preview(showSystemUi = true)
 @Composable
 private fun JobsScreenServerDownPreview() {

@@ -183,6 +183,7 @@ private fun FullScreenImageDialog(url: String, onDismiss: () -> Unit) {
     }
 }
 
+/** Shows an image with its explicit primary badge and view/delete actions, displaying progress during deletion. */
 @Composable
 private fun ImageTile(
     image: DriverImage,

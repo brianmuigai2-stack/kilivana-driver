@@ -38,6 +38,7 @@ object RouteRepository {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    /** Fetches a Mapbox driving route synchronously; returns a straight line with a reason on failure. Call off the main thread. */
     fun fetchRoute(from: GeoPoint, to: GeoPoint): RouteResult {
         return try {
             val accessToken = BuildConfig.MAPBOX_ACCESS_TOKEN

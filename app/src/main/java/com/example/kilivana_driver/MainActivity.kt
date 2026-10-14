@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
     /** The signed-in user, so the personal info screen renders live API data. */
     private val sessionStoreUser = SessionStore.currentUser
 
+    /** Initializes system bars and notification channels, then hosts the app navigation and photo picker. */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setSystemBars(darkHeader = true)

@@ -94,6 +94,7 @@ class ProfileRepository(
     private suspend fun <T> call(block: suspend () -> ApiResponse<T>): Result<T> =
         withContext(Dispatchers.IO) { runCatchingBody(block) }
 
+    /** Runs a request on the IO dispatcher and reports success unless explicitly rejected, without requiring response data. */
     private suspend fun callUnit(block: suspend () -> ApiResponse<Unit>): Result<Unit> =
         withContext(Dispatchers.IO) {
             try {
@@ -107,6 +108,7 @@ class ProfileRepository(
             }
         }
 
+    /** Unwraps nonnull response data or returns a failure with backend error details or the request exception. */
     private suspend fun <T> runCatchingBody(block: suspend () -> ApiResponse<T>): Result<T> = try {
         val response = block()
         if (response.success != false && response.data != null) {

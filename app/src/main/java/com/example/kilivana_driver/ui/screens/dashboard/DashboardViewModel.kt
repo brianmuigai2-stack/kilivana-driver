@@ -76,6 +76,7 @@ class DashboardViewModel(
         }
     }
 
+    /** Builds delivered activity entries from the first five supplied jobs, preferring their destination addresses. */
     private fun buildRecentActivity(jobs: List<DeliveryJob>): List<ActivityItem> {
         return jobs.take(5).map { job ->
             val address = if (job.destinationAddress.isNullOrBlank()) {
@@ -91,6 +92,7 @@ class DashboardViewModel(
         }
     }
 
+    /** Formats a positive transit duration as hours and minutes, or returns blank for nonpositive values. */
     private fun formatTransitMinutes(minutes: Int): String {
         if (minutes <= 0) return ""
         val h = minutes / 60
@@ -102,12 +104,14 @@ class DashboardViewModel(
         }
     }
 
+    /** Returns whether the backend status represents an assigned or ongoing delivery. */
     private fun DeliveryJob.isAccepted(): Boolean = when (status?.lowercase()) {
         "assigned", "accepted", "picked_up", "in_transit", "in_progress",
         "en_route_to_buyer", "en_route_to_dropoff" -> true
         else -> false
     }
 
+    /** Returns whether the backend status represents a completed delivery. */
     private fun DeliveryJob.isCompleted(): Boolean = when (status?.lowercase()) {
         "completed", "delivered" -> true
         else -> false

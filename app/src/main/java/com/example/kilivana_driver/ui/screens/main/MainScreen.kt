@@ -42,6 +42,7 @@ import com.example.kilivana_driver.ui.screens.settings.SettingsScreen
 import com.example.kilivana_driver.ui.screens.settings.SettingsUiState
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 
+/** Hosts the main tabs and detail screens, routing navigation and feature actions through the supplied callbacks. */
 @Composable
 fun MainScreen(
     dashboardState: DashboardUiState,

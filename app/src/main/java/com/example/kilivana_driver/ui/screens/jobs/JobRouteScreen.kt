@@ -102,6 +102,7 @@ private const val PREVIEW_LINE = 0xFF8A94A6.toInt()
 private const val TRACKING_LINE = 0xFF3B82F6.toInt()
 private const val ROUTE_CAMERA_PITCH = 45.0
 
+/** Shows the active trip map, tracking history and pickup/delivery controls, forwarding completion to the caller. */
 @Composable
 fun JobRouteScreen(
     job: Job,
@@ -571,6 +572,7 @@ private class RouteMapAnnotations(
     private val dropoffIcon by lazy { createCircleBitmap(BUYER_RED) }
     private val trackingIcon by lazy { createCircleBitmap(DRIVER_BLUE, radius = 9f) }
 
+    /** Replaces stop annotations with pickup, dropoff and the latest tracking ping when available. */
     fun drawPoints(
         pickupPoint: GeoPoint,
         dropoffPoint: GeoPoint,
@@ -621,6 +623,7 @@ private class RouteMapAnnotations(
         }
     }
 
+    /** Replaces route lines with preview, active and tracking paths that each contain at least two points. */
     fun drawLines(
         activeRoute: List<GeoPoint>?,
         previewRoute: List<GeoPoint>?,
@@ -639,12 +642,14 @@ private class RouteMapAnnotations(
             ?.let { lineManager.createPolyline(it, TRACKING_LINE, width = 3.0, opacity = 0.65) }
     }
 
+    /** Releases the stop, vehicle and route annotation managers. */
     fun destroy() {
         stopPointManager.onDestroy()
         vehiclePointManager.onDestroy()
         lineManager.onDestroy()
     }
 
+    /** Creates a route polyline with the supplied color, width and opacity, using rounded joins. */
     private fun PolylineAnnotationManager.createPolyline(
         points: List<GeoPoint>,
         color: Int,
@@ -662,6 +667,7 @@ private class RouteMapAnnotations(
     }
 }
 
+/** Creates a circular marker bitmap with the supplied fill color and radius, a white border and a shadow. */
 private fun createCircleBitmap(
     color: Int,
     radius: Float = 13f
@@ -776,6 +782,7 @@ private fun TripStep(
     }
 }
 
+/** Previews the trip route screen with a sample job and inactive navigation callbacks. */
 @Preview(showSystemUi = true)
 @Composable
 private fun JobRouteScreenPreview() {

@@ -92,6 +92,7 @@ data class DeliveryJob(
         isNew = false
     )
 
+    /** Maps backend statuses to job tabs, defaulting unknown or absent statuses to available. */
     private fun mapStatus(backendStatus: String?): JobStatus = when (backendStatus?.lowercase()) {
         "pending_assignment", "available", "unassigned" -> JobStatus.AVAILABLE
         "assigned", "accepted", "picked_up", "in_transit", "in_progress",
@@ -100,6 +101,7 @@ data class DeliveryJob(
         else -> JobStatus.AVAILABLE
     }
 
+    /** Formats an ISO instant in the device time zone; returns blank for missing input or the original on parse failure. */
     private fun formatTime(isoTimestamp: String?): String {
         if (isoTimestamp.isNullOrBlank()) return ""
         return runCatching {
@@ -117,6 +119,7 @@ data class DeliveryJob(
         }.getOrDefault(isoTimestamp)
     }
 
+    /** Formats positive minutes as hours and minutes, returning blank for nonpositive durations. */
     private fun formatMinutes(minutes: Int): String {
         if (minutes <= 0) return ""
         val h = minutes / 60
@@ -128,5 +131,6 @@ data class DeliveryJob(
         }
     }
 
+    /** Truncates this value to an integer for the displayed distance. */
     private fun Double.roundToInt(): Int = this.toInt()
 }

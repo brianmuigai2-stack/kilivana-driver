@@ -101,6 +101,7 @@ class JobsRepository(
             runCatchingBody { api.getTrackingHistory(jobId) }
         }
 
+    /** Unwraps a response with data into a Result, classifying rejected responses and request exceptions as failures. */
     private suspend fun <T> runCatchingBody(
         block: suspend () -> ApiResponse<T>
     ): Result<T> = try {
@@ -144,6 +145,7 @@ class JobsRepository(
             JobsException(JobsErrorType.OTHER, e.message ?: "Something went wrong", e)
     }
 
+    /** Reads an HTTP error envelope and returns its description, or null if it is missing or cannot be decoded. */
     private fun readErrorBody(e: HttpException): String? {
         val raw = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
             ?.takeIf { it.isNotBlank() } ?: return null
@@ -152,6 +154,7 @@ class JobsRepository(
         return describe(envelope.error, envelope.message).takeIf { it.isNotBlank() }
     }
 
+    /** Combines nonblank error codes and details, using the fallback when neither is present. */
     private fun describe(error: ApiError?, fallback: String): String {
         val code = error?.code?.takeIf { it.isNotBlank() }
         val details = error?.details?.takeIf { it.isNotBlank() }

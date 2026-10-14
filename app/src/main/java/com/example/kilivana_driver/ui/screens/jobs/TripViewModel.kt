@@ -269,6 +269,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Requests a route when missing or sufficiently far from its origin, respecting the minimum refetch interval. */
     private fun maybeRecalculateRoute(current: GeoPoint) {
         val stage = tripRepository.tripStage.value ?: TripStage.HEADING_TO_PICKUP
         val target = _targetGeoPoint ?: return
@@ -298,6 +299,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Fetches the route from the current location to the target on IO and updates its points, fallback flag and distance label. */
     private fun fetchRouteToTarget() {
         val target = _targetGeoPoint ?: return
         val current = currentLocation?.let { GeoPoint(it.latitude, it.longitude) } ?: return
