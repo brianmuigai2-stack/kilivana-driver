@@ -297,6 +297,29 @@ fun ProfileScreen(
         )
     }
 
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Log out?") },
+            text = { Text("You'll need your email address and password to sign in again.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutDialog = false
+                        onLogout()
+                    }
+                ) {
+                    Text(text = "Log Out", color = KilivanaNotificationRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text(text = "Cancel", color = KilivanaTextMuted)
+                }
+            }
+        )
+    }
+
     if (showDeletePhotoDialog) {
         AlertDialog(
             onDismissRequest = { showDeletePhotoDialog = false },
