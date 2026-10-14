@@ -76,7 +76,7 @@ class ProfileRepository(
                 image = part,
                 isPrimary = isPrimary
             ).mapImages()
-            if (response.success) {
+            if (response.success != false) {
                 Result.success(response.data.orEmpty())
             } else {
                 Result.failure(Exception(describe(response.error, response.message)))
@@ -94,11 +94,12 @@ class ProfileRepository(
     private suspend fun <T> call(block: suspend () -> ApiResponse<T>): Result<T> =
         withContext(Dispatchers.IO) { runCatchingBody(block) }
 
+    /** Runs a request on the IO dispatcher and reports success unless explicitly rejected, without requiring response data. */
     private suspend fun callUnit(block: suspend () -> ApiResponse<Unit>): Result<Unit> =
         withContext(Dispatchers.IO) {
             try {
                 val response = block()
-                if (response.success) Result.success(Unit)
+                if (response.success != false) Result.success(Unit)
                 else Result.failure(Exception(describe(response.error, response.message)))
             } catch (e: HttpException) {
                 Result.failure(Exception(readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"))
@@ -107,9 +108,10 @@ class ProfileRepository(
             }
         }
 
+    /** Unwraps nonnull response data or returns a failure with backend error details or the request exception. */
     private suspend fun <T> runCatchingBody(block: suspend () -> ApiResponse<T>): Result<T> = try {
         val response = block()
-        if (response.success && response.data != null) {
+        if (response.success != false && response.data != null) {
             Result.success(response.data)
         } else {
             Result.failure(Exception(describe(response.error, response.message)))

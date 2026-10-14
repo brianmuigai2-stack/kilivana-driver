@@ -42,6 +42,7 @@ import com.example.kilivana_driver.ui.screens.settings.SettingsScreen
 import com.example.kilivana_driver.ui.screens.settings.SettingsUiState
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 
+/** Hosts the main tabs and detail screens, routing navigation and feature actions through the supplied callbacks. */
 @Composable
 fun MainScreen(
     dashboardState: DashboardUiState,
@@ -52,6 +53,7 @@ fun MainScreen(
     onJobStatusSelected: (JobStatus) -> Unit,
     onAcceptJob: (String) -> Unit,
     onCompleteJob: (String) -> Unit,
+    onRefreshJobs: () -> Unit,
     onPushNotificationsChange: (Boolean) -> Unit,
     onNotificationSoundChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
@@ -245,11 +247,12 @@ fun MainScreen(
                             },
                             onProfileClick = { selectedTab = BottomTab.MORE }
                         )
-                        BottomTab.JOBS -> JobsScreen(
+                         BottomTab.JOBS -> JobsScreen(
                             uiState = jobsState,
                             onStatusSelected = onJobStatusSelected,
                             onFilterClick = { /* TODO: filter sheet */ },
-                            onJobClick = { job -> selectedJobId = job.id }
+                            onJobClick = { job -> selectedJobId = job.id },
+                            onRefresh = onRefreshJobs
                         )
                         BottomTab.MAP -> MapScreen(
                             activeJob = acceptedJob,

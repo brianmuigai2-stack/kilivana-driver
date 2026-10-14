@@ -7,11 +7,14 @@ import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.LocationUpdate
 import com.example.kilivana_driver.data.model.TrackingConfig
+import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import com.example.kilivana_driver.data.model.TripStage
 import com.example.kilivana_driver.data.model.UploadResult
+import com.example.kilivana_driver.data.network.JobsRepository
 import com.example.kilivana_driver.data.network.LocationRepository
 import com.example.kilivana_driver.data.network.SessionStore
 import com.example.kilivana_driver.data.network.TripRepository
+import com.example.kilivana_driver.ui.screens.map.GeoPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,14 +22,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.osmdroid.util.GeoPoint
 
 /**
  * ViewModel for the active trip (En Route screen).
  *
  * Coordinates:
  * - GPS location stream (from FusedLocationProvider via rememberUserLocation)
- * - Route calculation (OSRM via RouteRepository)
+ * - Route calculation (Mapbox Directions via RouteRepository)
  * - Backend location uploads (via LocationRepository)
  * - Trip lifecycle (via TripRepository)
  * - Smooth vehicle animation (via CarMarker logic)
@@ -40,6 +42,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
 
     private val locationRepository = LocationRepository()
     private val tripRepository = TripRepository(locationRepository = locationRepository)
+    private val jobsRepository = JobsRepository()
     private val trackingConfig = TrackingConfig.DEFAULT
 
     // ---- Inputs from the screen ----
@@ -72,7 +75,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     private val _routePoints = MutableStateFlow<List<GeoPoint>?>(null)
     val routePoints: StateFlow<List<GeoPoint>?> = _routePoints.asStateFlow()
 
-    /** Whether the current route is a fallback straight line (OSRM failed). */
+    /** Whether the current route is a fallback straight line (route service failed). */
     var _usingEstimatedRoute = MutableStateFlow(false)
     val usingEstimatedRoute: StateFlow<Boolean> = _usingEstimatedRoute.asStateFlow()
 
@@ -87,16 +90,43 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     /** Offline queue size (for diagnostics). */
     val queueSize: StateFlow<Int> = locationRepository.queueSize
 
+    /** GPS fixes the driver uploaded for this job, fetched from GET /tracking. */
+    private val _trackingPoints = MutableStateFlow<List<TrackingHistoryPoint>>(emptyList())
+    val trackingPoints: StateFlow<List<TrackingHistoryPoint>> = _trackingPoints.asStateFlow()
+
+    /** Last error from a tracking-history fetch, if any. */
+    private val _trackingError = MutableStateFlow<String?>(null)
+    val trackingError: StateFlow<String?> = _trackingError.asStateFlow()
+
     // ---- Heading/animation state (mirrors CarMarker logic) ----
     private var lastLocationForHeading: GeoPoint? = null
     private var _currentHeading = 0f
     private var hasInitialHeading = false
+    private var lastRouteFetchAtMs = 0L
 
     /** Initializes the ViewModel with a job and starts tracking. */
     fun initialize(job: Job) {
         _job = job
         _targetGeoPoint = GeoPoint(job.pickupLat, job.pickupLon)
+        _routePoints.value = null
+        _usingEstimatedRoute.value = false
         _distanceLabel.value = "Finding route to farmer…"
+        lastRouteFetchAtMs = 0L
+        loadTrackingHistory(job.id)
+    }
+
+    /** Fetches the GPS tracking history for this job from the backend. */
+    private fun loadTrackingHistory(jobId: String) {
+        val id = jobId.toLongOrNull() ?: return
+        viewModelScope.launch {
+            val result = jobsRepository.getTrackingHistory(id)
+            if (result.isSuccess) {
+                _trackingPoints.value = result.getOrNull().orEmpty()
+                _trackingError.value = null
+            } else {
+                _trackingError.value = result.exceptionOrNull()?.message
+            }
+        }
     }
 
     /** Called by the screen when a new GPS fix arrives. */
@@ -121,13 +151,12 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     fun startTrip() {
         _job?.let { job ->
             viewModelScope.launch {
-                val success = tripRepository.startTracking(job)
-                if (success) {
-                    // Immediately upload first location.
-                    currentLocation?.let { maybeUploadLocation(it) }
-                    // Fetch initial route.
-                    fetchRouteToTarget()
-                }
+                tripRepository.startTracking(job)
+                // The route is fetched regardless of whether the backend tracking
+                // endpoint succeeded — Mapbox route lookup is a local operation that
+                // must not be blocked by a backend endpoint that may not be
+                // implemented yet (TripApi documents these as "should implement").
+                fetchRouteToTarget()
             }
         }
     }
@@ -137,7 +166,10 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         tripRepository.advanceToInTransit()
         _job?.let { job ->
             _targetGeoPoint = GeoPoint(job.dropoffLat, job.dropoffLon)
+            _routePoints.value = null
+            _usingEstimatedRoute.value = false
             _distanceLabel.value = "Finding route to buyer…"
+            lastRouteFetchAtMs = 0L
             fetchRouteToTarget()
         }
     }
@@ -237,10 +269,12 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Requests a route when missing or sufficiently far from its origin, respecting the minimum refetch interval. */
     private fun maybeRecalculateRoute(current: GeoPoint) {
-        val stage = tripRepository.tripStage.value ?: return
+        val stage = tripRepository.tripStage.value ?: TripStage.HEADING_TO_PICKUP
         val target = _targetGeoPoint ?: return
         val route = _routePoints.value
+        val now = System.currentTimeMillis()
 
         // Recalculate if we don't have a route yet, or if we've moved
         // far enough from the last route origin.
@@ -260,20 +294,22 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
             else -> false
         }
 
-        if (shouldRecalculate) {
+        if (shouldRecalculate && (route == null || now - lastRouteFetchAtMs >= REROUTE_MIN_INTERVAL_MS)) {
             fetchRouteToTarget()
         }
     }
 
+    /** Fetches the route from the current location to the target on IO and updates its points, fallback flag and distance label. */
     private fun fetchRouteToTarget() {
         val target = _targetGeoPoint ?: return
         val current = currentLocation?.let { GeoPoint(it.latitude, it.longitude) } ?: return
 
         viewModelScope.launch(Dispatchers.IO) {
+            lastRouteFetchAtMs = System.currentTimeMillis()
             val result = com.example.kilivana_driver.data.routing.RouteRepository.fetchRoute(current, target)
             _routePoints.value = result.points
             _usingEstimatedRoute.value = !result.isRealRoute
-            _distanceLabel.value = when (tripRepository.tripStage.value) {
+            _distanceLabel.value = when (tripRepository.tripStage.value ?: TripStage.HEADING_TO_PICKUP) {
                 TripStage.HEADING_TO_PICKUP -> "%.1f km to farmer".format(
                     com.example.kilivana_driver.data.routing.RouteRepository.routeLengthKm(result.points)
                 )

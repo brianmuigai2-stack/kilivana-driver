@@ -86,6 +86,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 import java.util.Locale
 
+/** Displays the driver profile and photo actions, with confirmation before invoking the logout callback. */
 @Composable
 fun ProfileScreen(
     driver: Driver,
@@ -294,6 +295,29 @@ fun ProfileScreen(
         ImageViewerDialog(
             url = profileImageUrl,
             onDismiss = { viewingProfileImage = false }
+        )
+    }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Log out?") },
+            text = { Text("You'll need your email address and password to sign in again.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutDialog = false
+                        onLogout()
+                    }
+                ) {
+                    Text(text = "Log Out", color = KilivanaNotificationRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text(text = "Cancel", color = KilivanaTextMuted)
+                }
+            }
         )
     }
 

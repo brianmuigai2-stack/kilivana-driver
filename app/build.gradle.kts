@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -19,6 +21,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Read Mapbox token from local.properties
+        val localProperties = Properties()
+        rootProject.file("local.properties").inputStream().use { localProperties.load(it) }
+        val mapboxToken = localProperties.getProperty("mapbox.access.token", "")
+        buildConfigField("String", "MAPBOX_ACCESS_TOKEN", "\"$mapboxToken\"")
+        resValue("string", "mapbox_access_token", mapboxToken)
     }
 
     buildTypes {
@@ -56,7 +65,6 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("com.google.android.gms:play-services-location:21.3.0")
-    implementation("org.osmdroid:osmdroid-android:6.1.18")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -76,6 +84,9 @@ dependencies {
     implementation(libs.ucrop)
     implementation(libs.datastore.preferences)
     implementation(libs.security.crypto)
+    implementation(libs.mapbox.maps)
+    implementation(libs.mapbox.maps.compose)
+    implementation(libs.mapbox.maps.annotation)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

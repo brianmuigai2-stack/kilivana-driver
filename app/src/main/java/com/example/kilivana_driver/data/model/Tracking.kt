@@ -77,7 +77,7 @@ sealed interface UploadResult {
  */
 @Serializable
 data class LocationUploadResponse(
-    val success: Boolean = true,
+    val success: Boolean? = true,
     val message: String? = null,
     val serverTimestamp: Long? = null
 )

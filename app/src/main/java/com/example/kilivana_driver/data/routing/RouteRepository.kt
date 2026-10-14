@@ -1,11 +1,13 @@
 package com.example.kilivana_driver.data.routing
 
 import android.util.Log
+import com.example.kilivana_driver.BuildConfig
+import com.example.kilivana_driver.ui.screens.map.GeoPoint
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
-import org.osmdroid.util.GeoPoint
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 data class RouteResult(
     val points: List<GeoPoint>,
@@ -16,49 +18,58 @@ data class RouteResult(
 )
 
 /**
- * Fetches a road-following route from OSRM's free public demo server.
+ * Fetches a road-following route from the Mapbox Directions API.
  *
- * NOTE: router.project-osrm.org is meant for light development/demo use,
- * not production traffic. For a live product, point BASE_URL at a paid
- * or self-hosted OSRM/GraphHopper instance instead.
+ * The OSRM public demo server at router.project-osrm.org is frequently
+ * unreachable from mobile networks and emulators (TCP-level timeouts on port
+ * 443), so Mapbox Directions is used instead — the app already ships with a
+ * Mapbox access token for map tiles, and api.mapbox.com is reachable from the
+ * same networks that reach the tile servers.
  *
  * Call this from a background thread (e.g. Dispatchers.IO) — it blocks.
  */
 object RouteRepository {
 
     private const val TAG = "RouteRepository"
-    private const val BASE_URL = "https://router.project-osrm.org/route/v1/driving"
+    private const val BASE_URL = "https://api.mapbox.com/directions/v5/mapbox/driving"
 
-    // The public OSRM server, like OSM's tile servers, expects clients to
-    // identify themselves. Keep this in step with the tile User-Agent.
-    private const val USER_AGENT = "KilivanaDriver/1.0 (Kilivana agricultural logistics app)"
+    private val okHttpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
 
+    /** Fetches a Mapbox driving route synchronously; returns a straight line with a reason on failure. Call off the main thread. */
     fun fetchRoute(from: GeoPoint, to: GeoPoint): RouteResult {
-        var connection: HttpURLConnection? = null
         return try {
-            val url = URL(
-                String.format(
-                    Locale.US,
-                    "%s/%f,%f;%f,%f?overview=full&geometries=geojson",
-                    BASE_URL, from.longitude, from.latitude, to.longitude, to.latitude
-                )
-            )
-            connection = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10_000
-                readTimeout = 10_000
-                requestMethod = "GET"
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
+            val accessToken = BuildConfig.MAPBOX_ACCESS_TOKEN
+            if (accessToken.isBlank()) {
+                return fallback(from, to, "Mapbox access token not configured")
             }
 
-            val status = connection.responseCode
-            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val url = String.format(
+                Locale.US,
+                "%s/%f,%f;%f,%f?geometries=geojson&overview=full&access_token=%s",
+                BASE_URL, from.longitude, from.latitude, to.longitude, to.latitude,
+                accessToken
+            )
+            val request = Request.Builder()
+                .url(url)
+                .get()
+                .addHeader("User-Agent", "KilivanaDriver/1.0")
+                .addHeader("Accept", "application/json")
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val body = response.body?.string().orEmpty()
+
+            if (!response.isSuccessful) {
+                return fallback(from, to, "HTTP ${response.code}")
+            }
 
             val json = JSONObject(body)
             val code = json.optString("code")
-            if (status !in 200..299 || code != "Ok") {
-                return fallback(from, to, "HTTP $status, OSRM code '$code'")
+            if (code != "Ok") {
+                return fallback(from, to, "Mapbox code '$code'")
             }
 
             val coords = json
@@ -74,8 +85,6 @@ object RouteRepository {
             RouteResult(points = points, isRealRoute = true)
         } catch (e: Exception) {
             fallback(from, to, "${e.javaClass.simpleName}: ${e.message}")
-        } finally {
-            connection?.disconnect()
         }
     }
 

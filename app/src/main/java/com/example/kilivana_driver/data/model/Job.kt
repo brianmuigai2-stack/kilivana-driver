@@ -19,7 +19,7 @@ enum class JobStatus(val label: String) {
  * payout all come from the backend once the jobs endpoint is wired up.
  *
  * [pickupLat]/[pickupLon] and [dropoffLat]/[dropoffLon] are what the
- * En Route screen draws the OSRM route between.
+ * En Route screen draws the Mapbox Directions route between.
  *
  * [deliveryOtp] is the buyer's delivery confirmation code. It is
  * currently a made-up sample value; in production the backend generates

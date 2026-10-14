@@ -110,12 +110,12 @@ class AuthRepository(
                     // Right password, wrong kind of account (e.g. an admin): do not
                     // keep the session. The server still enforces roles; this just
                     // stops the driver app from opening for non-drivers.
-                    response.success && data != null && data.accessToken.isNotBlank() &&
+                    response.success != false && data != null && data.accessToken.isNotBlank() &&
                         !data.user.isDriver() -> Result.failure(
                         Exception("This app is for Kilivana drivers only.")
                     )
 
-                    response.success && data != null && data.accessToken.isNotBlank() -> {
+                    response.success != false && data != null && data.accessToken.isNotBlank() -> {
                         SessionStore.save(data.user, data.accessToken, data.refreshToken)
                         if (rememberMe) {
                             preferences?.save(data.user, data.accessToken, data.refreshToken)
@@ -125,7 +125,7 @@ class AuthRepository(
                         Result.success(data.user)
                     }
 
-                    response.success -> Result.failure(
+                    response.success == true -> Result.failure(
                         Exception("Logged in but the server returned no access token")
                     )
 
@@ -143,7 +143,7 @@ class AuthRepository(
         withContext(Dispatchers.IO) {
             try {
                 val response = api.me()
-                if (response.success && response.data != null) {
+                if (response.success != false && response.data != null) {
                     Result.success(response.data)
                 } else {
                     Result.failure(Exception(describe(response.error, response.message)))
@@ -184,7 +184,7 @@ class AuthRepository(
         try {
             val response = api.me()
             val user = response.data
-            if (response.success && user != null) SessionCheck.Valid(user) else SessionCheck.Rejected
+            if (response.success != false && user != null) SessionCheck.Valid(user) else SessionCheck.Rejected
         } catch (e: HttpException) {
             if (e.code() == 401 || e.code() == 403) SessionCheck.Rejected else SessionCheck.Unreachable
         } catch (e: Exception) {

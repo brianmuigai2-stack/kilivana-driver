@@ -2,11 +2,14 @@ package com.example.kilivana_driver.ui.screens.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.kilivana_driver.data.model.DeliveryJob
+import com.example.kilivana_driver.data.network.JobsRepository
 import com.example.kilivana_driver.data.network.SessionStore
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Locale
 
@@ -30,27 +33,89 @@ data class DashboardUiState(
     val photoUrl: String = ""
 )
 
-class DashboardViewModel : ViewModel() {
+class DashboardViewModel(
+    private val jobsRepository: JobsRepository = JobsRepository()
+) : ViewModel() {
 
-    /**
-     * The name shown in the greeting comes from the signed-in user, so it
-     * matches whoever actually logged in. Everything else still falls back to
-     * sample data until its endpoint exists (see [sampleDashboardState]).
-     */
-    val uiState: StateFlow<DashboardUiState> = SessionStore.currentUser
-        .map { user ->
-            val sample = sampleDashboardState()
-            sample.copy(
-                greeting = currentGreeting(),
-                driverName = user?.name.orEmpty().ifBlank { "Driver" },
-                driverId = user?.let { "DRV-%04d".format(Locale.US, it.id) }.orEmpty()
+    private val _uiState = MutableStateFlow(DashboardUiState())
+    val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+
+    init {
+        _uiState.update { it.copy(greeting = currentGreeting()) }
+        viewModelScope.launch {
+            SessionStore.currentUser.collect { user ->
+                _uiState.update {
+                    it.copy(
+                        driverName = user?.name.orEmpty().ifBlank { "Driver" },
+                        driverId = user?.let { "DRV-%04d".format(Locale.US, it.id) }.orEmpty()
+                    )
+                }
+                if (user != null) refreshJobs()
+            }
+        }
+    }
+
+    /** Fetches the driver's jobs from the backend and derives the dashboard metrics. */
+    fun refreshJobs() {
+        viewModelScope.launch {
+            val result = jobsRepository.getJobs()
+            if (result.isSuccess) {
+                val deliveryJobs = result.getOrNull().orEmpty()
+                val acceptedJobs = deliveryJobs.filter { it.isAccepted() }
+                val completedJobs = deliveryJobs.filter { it.isCompleted() }
+                val totalEstimatedMinutes = acceptedJobs.sumOf { it.estimatedMinutes }
+
+                _uiState.update {
+                    it.copy(
+                        deliveriesAssigned = acceptedJobs.size,
+                        estimatedTransit = formatTransitMinutes(totalEstimatedMinutes),
+                        recentActivity = buildRecentActivity(completedJobs)
+                    )
+                }
+            }
+        }
+    }
+
+    /** Builds delivered activity entries from the first five supplied jobs, preferring their destination addresses. */
+    private fun buildRecentActivity(jobs: List<DeliveryJob>): List<ActivityItem> {
+        return jobs.take(5).map { job ->
+            val address = if (job.destinationAddress.isNullOrBlank()) {
+                job.pickupAddress ?: ""
+            } else {
+                job.destinationAddress
+            }
+            ActivityItem(
+                title = "Delivered • Order ${job.id}",
+                subtitle = address,
+                type = ActivityType.DELIVERED
             )
         }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.Eagerly,
-            initialValue = sampleDashboardState()
-        )
+    }
+
+    /** Formats a positive transit duration as hours and minutes, or returns blank for nonpositive values. */
+    private fun formatTransitMinutes(minutes: Int): String {
+        if (minutes <= 0) return ""
+        val h = minutes / 60
+        val m = minutes % 60
+        return when {
+            h > 0 && m > 0 -> "${h}h ${m}m"
+            h > 0 -> "${h}h"
+            else -> "${m}m"
+        }
+    }
+
+    /** Returns whether the backend status represents an assigned or ongoing delivery. */
+    private fun DeliveryJob.isAccepted(): Boolean = when (status?.lowercase()) {
+        "assigned", "accepted", "picked_up", "in_transit", "in_progress",
+        "en_route_to_buyer", "en_route_to_dropoff" -> true
+        else -> false
+    }
+
+    /** Returns whether the backend status represents a completed delivery. */
+    private fun DeliveryJob.isCompleted(): Boolean = when (status?.lowercase()) {
+        "completed", "delivered" -> true
+        else -> false
+    }
 }
 
 private fun currentGreeting(): String {
@@ -62,12 +127,11 @@ private fun currentGreeting(): String {
     }
 }
 
+/** Sample data for Compose previews only. */
 internal fun sampleDashboardState() = DashboardUiState(
-    greeting = currentGreeting(),
-    // Name/id are overridden per signed-in user by the ViewModel; the rest is
-    // still placeholder until the jobs endpoints exist.
-    driverName = "",
-    driverId = "",
+    greeting = "Good morning",
+    driverName = "John Kimani",
+    driverId = "DRV-0042",
     deliveriesAssigned = 2,
     estimatedTransit = "4h 15m",
     hasUnreadNotifications = true,

@@ -1,5 +1,11 @@
 package com.example.kilivana_driver.ui.screens.jobs
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,24 +30,35 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Error
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.JobStatus
+import com.example.kilivana_driver.data.model.JobsErrorType
 import com.example.kilivana_driver.ui.theme.KilivanaAmber
 import com.example.kilivana_driver.ui.theme.KilivanaAmberTint
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
@@ -59,12 +76,14 @@ import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 import java.util.Locale
 
+/** Renders the selected job tab with loading, empty or error states, forwarding user actions to the caller. */
 @Composable
 fun JobsScreen(
     uiState: JobsUiState,
     onStatusSelected: (JobStatus) -> Unit,
     onFilterClick: () -> Unit,
     onJobClick: (Job) -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val visibleJobs = uiState.visibleJobs
@@ -75,7 +94,7 @@ fun JobsScreen(
             .background(KilivanaBackground)
     ) {
         KilivanaStatusBarScrim()
-        JobsHeader(onFilterClick = onFilterClick)
+        JobsHeader(onFilterClick = onFilterClick, onRefresh = onRefresh)
 
         Row(
             modifier = Modifier
@@ -92,24 +111,59 @@ fun JobsScreen(
             }
         }
 
+        // Shimmering top bar while refreshing with existing jobs (pull-to-refresh style).
+        // When there are no jobs yet, skeleton cards fill the screen instead.
+        if (uiState.isLoading && visibleJobs.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .background(shimmerBrush())
+            )
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (visibleJobs.isEmpty()) {
-                item { EmptyState(status = uiState.selectedStatus) }
-            } else {
-                items(visibleJobs, key = { it.id }) { job ->
-                    JobCard(job = job, onClick = { onJobClick(job) })
+            when {
+                uiState.isLoading && visibleJobs.isEmpty() -> {
+                    items(6) {
+                        JobCardSkeleton()
+                    }
+                }
+
+                visibleJobs.isEmpty() -> {
+                    item {
+                        if (uiState.errorMessage != null) {
+                            ErrorState(
+                                error = uiState.errorMessage,
+                                errorType = uiState.errorType,
+                                onRetry = onRefresh
+                            )
+                        } else {
+                            EmptyState(status = uiState.selectedStatus)
+                        }
+                    }
+                }
+
+                else -> {
+                    items(visibleJobs, key = { it.id }) { job ->
+                        JobCard(job = job, onClick = { onJobClick(job) })
+                    }
                 }
             }
         }
     }
 }
 
+/** Shows the jobs title with refresh and filter actions. */
 @Composable
-private fun JobsHeader(onFilterClick: () -> Unit) {
+private fun JobsHeader(
+    onFilterClick: () -> Unit,
+    onRefresh: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -123,6 +177,26 @@ private fun JobsHeader(onFilterClick: () -> Unit) {
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold
         )
+
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .shadow(2.dp, CircleShape)
+                .clip(CircleShape)
+                .background(KilivanaWhite)
+                .clickable(onClick = onRefresh),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Refresh,
+                contentDescription = "Refresh jobs",
+                tint = KilivanaTextPrimary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
         Box(
             modifier = Modifier
                 .size(44.dp)
@@ -375,6 +449,184 @@ private fun EmptyState(status: JobStatus) {
     }
 }
 
+/** Shows a job loading failure with a title based on its error type and a retry action. */
+@Composable
+private fun ErrorState(
+    error: String?,
+    errorType: JobsErrorType?,
+    onRetry: () -> Unit
+) {
+    val (title, icon) = when (errorType) {
+        JobsErrorType.NO_INTERNET -> "No internet connection" to Icons.Outlined.WifiOff
+        JobsErrorType.SERVER_DOWN -> "Server is not running" to Icons.Outlined.CloudOff
+        else -> "Something went wrong" to Icons.Outlined.Error
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 64.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = KilivanaNotificationRed,
+            modifier = Modifier.size(40.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = title,
+            color = KilivanaTextPrimary,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = error ?: "An unexpected error occurred",
+            color = KilivanaTextMuted,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        TextButton(onClick = onRetry) {
+            Text(
+                text = "Retry",
+                color = KilivanaGreen,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+/**
+ * A sweeping gradient brush used as the background for skeleton elements.
+ *
+ * The gradient is three stops — light gray → white → light gray — and its
+ * offsets are animated by an [InfiniteTransition] so the white band glides
+ * left-to-right, creating the shimmer known from placeholder UIs.
+ */
+@Composable
+private fun shimmerBrush(): Brush {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerProgress"
+    )
+    val span = 600f
+    val offset = progress * span * 2 - span
+    return Brush.horizontalGradient(
+        colors = listOf(
+            Color(0xFFE0E0E0),
+            Color(0xFFF5F5F5),
+            Color(0xFFE0E0E0)
+        ),
+        startX = offset,
+        endX = offset + span
+    )
+}
+
+/** A single shimmering rectangle, used as a placeholder line in skeleton cards. */
+@Composable
+private fun SkeletonBar(
+    modifier: Modifier = Modifier,
+    height: Dp = 14.dp,
+    cornerRadius: Dp = 4.dp
+) {
+    Box(
+        modifier = modifier
+            .height(height)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(shimmerBrush())
+    )
+}
+
+/**
+ * Skeleton placeholder for a [JobCard], showing the same layout as gray bars
+ * with a shimmer sweep. Shown while the jobs list is loading.
+ */
+@Composable
+private fun JobCardSkeleton(
+    modifier: Modifier = Modifier
+) {
+    val cardShape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(1.dp, cardShape)
+            .clip(cardShape)
+            .background(KilivanaWhite)
+            .padding(16.dp)
+    ) {
+        // Header: job ID placeholder + badge placeholder
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SkeletonBar(modifier = Modifier.width(100.dp), height = 18.dp)
+            SkeletonBar(
+                modifier = Modifier
+                    .width(60.dp)
+                    .height(20.dp),
+                cornerRadius = 10.dp
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Pickup route stop
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SkeletonBar(
+                modifier = Modifier.size(20.dp),
+                cornerRadius = 10.dp
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                SkeletonBar(modifier = Modifier.fillMaxWidth(0.8f), height = 14.dp)
+                Spacer(modifier = Modifier.height(6.dp))
+                SkeletonBar(modifier = Modifier.fillMaxWidth(0.5f), height = 12.dp)
+            }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Drop-off route stop
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SkeletonBar(
+                modifier = Modifier.size(20.dp),
+                cornerRadius = 10.dp
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                SkeletonBar(modifier = Modifier.fillMaxWidth(0.7f), height = 14.dp)
+                Spacer(modifier = Modifier.height(6.dp))
+                SkeletonBar(modifier = Modifier.fillMaxWidth(0.4f), height = 12.dp)
+            }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Cargo + details row
+        SkeletonBar(modifier = Modifier.fillMaxWidth(), height = 14.dp)
+        Spacer(modifier = Modifier.height(10.dp))
+        SkeletonBar(modifier = Modifier.fillMaxWidth(0.6f), height = 14.dp)
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // View details button
+        SkeletonBar(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp),
+            cornerRadius = 12.dp
+        )
+    }
+}
+
 internal fun formatKsh(amount: Int): String = "KSh %,d".format(Locale.US, amount)
 
 @Preview(showSystemUi = true)
@@ -385,7 +637,8 @@ private fun JobsScreenPreview() {
             uiState = JobsUiState(jobs = sampleJobs()),
             onStatusSelected = {},
             onFilterClick = {},
-            onJobClick = {}
+            onJobClick = {},
+            onRefresh = {}
         )
     }
 }
@@ -398,7 +651,59 @@ private fun JobsScreenEmptyPreview() {
             uiState = JobsUiState(selectedStatus = JobStatus.ACCEPTED, jobs = sampleJobs()),
             onStatusSelected = {},
             onFilterClick = {},
-            onJobClick = {}
+            onJobClick = {},
+            onRefresh = {}
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun JobsScreenLoadingPreview() {
+    KilivanaTheme {
+        JobsScreen(
+            uiState = JobsUiState(isLoading = true),
+            onStatusSelected = {},
+            onFilterClick = {},
+            onJobClick = {},
+            onRefresh = {}
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun JobsScreenNoInternetPreview() {
+    KilivanaTheme {
+        JobsScreen(
+            uiState = JobsUiState(
+                isLoading = false,
+                errorMessage = "No internet connection — check your network settings",
+                errorType = JobsErrorType.NO_INTERNET
+            ),
+            onStatusSelected = {},
+            onFilterClick = {},
+            onJobClick = {},
+            onRefresh = {}
+        )
+    }
+}
+
+/** Previews the jobs screen when the backend is unavailable. */
+@Preview(showSystemUi = true)
+@Composable
+private fun JobsScreenServerDownPreview() {
+    KilivanaTheme {
+        JobsScreen(
+            uiState = JobsUiState(
+                isLoading = false,
+                errorMessage = "The backend server is currently offline. Try again in a few minutes.",
+                errorType = JobsErrorType.SERVER_DOWN
+            ),
+            onStatusSelected = {},
+            onFilterClick = {},
+            onJobClick = {},
+            onRefresh = {}
         )
     }
 }

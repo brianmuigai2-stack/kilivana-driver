@@ -89,7 +89,7 @@ class LocationRepository(
         withContext(ioDispatcher) {
             try {
                 val response = api.uploadLocation(update.tripId, update)
-                if (response.success && response.data != null) {
+                if (response.success != false && response.data != null) {
                     UploadResult.Success(response.data!!)
                 } else {
                     val willRetry = isRetryableError(response.error, response.message)

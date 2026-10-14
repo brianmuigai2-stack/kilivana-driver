@@ -1,77 +1,44 @@
 package com.example.kilivana_driver.ui.screens.map
 
-import android.animation.ValueAnimator
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RectF
-import android.graphics.drawable.BitmapDrawable
+import android.graphics.Path
 import android.location.Location
-import android.view.animation.LinearInterpolator
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import kotlin.math.abs
+import com.mapbox.geojson.Point
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 
-/** Below this speed (m/s) the GPS bearing is too jittery to trust. */
 private const val MIN_SPEED_FOR_GPS_BEARING = 1.5f
-/** Ignore position updates that moved less than this when computing heading. */
 private const val MIN_MOVE_METERS_FOR_HEADING = 10.0
-/** Slowest/fastest the car marker glides between two positions. */
-private const val MIN_MOVE_ANIMATION_MS = 800L
-private const val MAX_MOVE_ANIMATION_MS = 3_000L
-/** Skip redrawing the car bitmap when the heading barely changed. */
-private const val REDRAW_ANGLE_DEGREES = 4f
 
-/**
- * Works out which way the driver is facing from a stream of GPS fixes.
- *
- * Preference order: the GPS's own bearing when moving fast enough, then
- * the direction of travel between the last two fixes, then (for the very
- * first fix) a bearing towards the destination, so the car points the
- * right way even before it moves.
- */
 internal class HeadingTracker {
-
     private var lastPoint: GeoPoint? = null
     private var heading = 0f
 
+    /** Updates the heading from GPS bearing or sufficient movement, using the target for the first fix when needed. */
     fun update(
         fix: Location,
         fallbackTarget: GeoPoint? = null
     ): Float {
-
-        val now = GeoPoint(
-            fix.latitude,
-            fix.longitude
-        )
-
+        val now = GeoPoint(fix.latitude, fix.longitude)
         val previous = lastPoint
 
         when {
-            fix.hasBearing() &&
-                fix.speed >= MIN_SPEED_FOR_GPS_BEARING -> {
-
+            fix.hasBearing() && fix.speed >= MIN_SPEED_FOR_GPS_BEARING -> {
                 heading = fix.bearing
                 lastPoint = now
             }
-
-            previous != null &&
-                previous.distanceToAsDouble(now) >= MIN_MOVE_METERS_FOR_HEADING -> {
-
+            previous != null && previous.distanceToAsDouble(now) >= MIN_MOVE_METERS_FOR_HEADING -> {
                 heading = previous.bearingTo(now).toFloat()
                 lastPoint = now
             }
-
             previous == null -> {
-
                 lastPoint = now
-
                 if (fallbackTarget != null) {
-                    heading = now.bearingTo(
-                        fallbackTarget
-                    ).toFloat()
+                    heading = now.bearingTo(fallbackTarget).toFloat()
                 }
             }
         }
@@ -80,391 +47,155 @@ internal class HeadingTracker {
     }
 }
 
-/**
- * The driver's car on the map: a small drawn vehicle that glides
- * between GPS fixes and rotates to the heading [HeadingTracker] gives it.
- *
- * Movement is interpolated with a [ValueAnimator] over a duration based
- * on how long the last update took, so the car appears to drive rather
- * than teleport. The bitmap is re-rotated only when the heading changes
- * by more than [REDRAW_ANGLE_DEGREES] to avoid churning bitmaps every
- * fix.
- */
-internal class CarMarker(
-    private val mapView: MapView,
-    context: Context
-) {
-
-    private val resources = context.resources
-
-    private val baseBitmap: Bitmap =
-        drawCarBitmap(context)
-
-    val marker: Marker =
-        Marker(mapView).apply {
-
-            setAnchor(
-                Marker.ANCHOR_CENTER,
-                Marker.ANCHOR_CENTER
-            )
-
-            setOnMarkerClickListener(
-                Marker.OnMarkerClickListener { _, _ ->
-                    true
-                }
-            )
-        }
-
-    private var animator: ValueAnimator? = null
-    private var hasPosition = false
+internal class CarMarker {
+    private var manager: PointAnnotationManager? = null
+    private var annotation: PointAnnotation? = null
+    private var currentTarget: Point = Point.fromLngLat(0.0, 0.0)
     private var shownBearing = 0f
-    private var drawnBearing = Float.NaN
-    private var lastUpdateTime = 0L
+    private val icon by lazy { createVehicleBitmap() }
 
-    init {
-        applyBearing(0f)
+    /** Attaches the vehicle marker to a manager, removing its annotation from the previous manager when changed. */
+    fun bind(manager: PointAnnotationManager) {
+        if (this.manager === manager) return
+        annotation?.let { this.manager?.delete(it) }
+        annotation = null
+        this.manager = manager
     }
 
+    /** Stores the target and normalized bearing, creating or moving the vehicle annotation when a manager is bound. */
     fun update(
-        target: GeoPoint,
+        target: Point,
         bearing: Float
     ) {
+        currentTarget = target
+        shownBearing = normalize(bearing)
 
-        val now = System.currentTimeMillis()
-        val normalizedTarget = normalize(bearing)
-
-        if (!hasPosition) {
-
-            hasPosition = true
-            lastUpdateTime = now
-
-            marker.position = target
-
-            applyBearing(normalizedTarget)
-
-            mapView.invalidate()
-
-            return
+        val pointManager = manager ?: return
+        val existing = annotation
+        if (existing == null) {
+            annotation = pointManager.create(
+                PointAnnotationOptions()
+                    .withPoint(currentTarget)
+                    .withIconImage(icon)
+                    .withIconSize(1.0)
+                    .withIconRotate(shownBearing.toDouble())
+            )
+        } else {
+            existing.point = currentTarget
+            existing.iconRotate = shownBearing.toDouble()
+            pointManager.update(existing)
         }
-
-        val duration =
-            (now - lastUpdateTime)
-                .coerceIn(
-                    MIN_MOVE_ANIMATION_MS,
-                    MAX_MOVE_ANIMATION_MS
-                )
-
-        lastUpdateTime = now
-
-        animator?.cancel()
-
-        val fromLat = marker.position.latitude
-        val fromLon = marker.position.longitude
-        val fromBearing = shownBearing
-
-        val turn =
-            (normalizedTarget - fromBearing + 540f) %
-                360f - 180f
-
-        animator =
-            ValueAnimator.ofFloat(0f, 1f).apply {
-
-                this.duration = duration
-                interpolator = LinearInterpolator()
-
-                addUpdateListener { animation ->
-
-                    val progress =
-                        animation.animatedValue as Float
-
-                    marker.position =
-                        GeoPoint(
-                            fromLat +
-                                (target.latitude - fromLat) *
-                                progress,
-
-                            fromLon +
-                                (target.longitude - fromLon) *
-                                progress
-                        )
-
-                    applyBearing(
-                        fromBearing +
-                            turn * progress
-                    )
-
-                    mapView.invalidate()
-                }
-
-                start()
-            }
     }
 
+    /** Removes the vehicle annotation and resets its target to longitude and latitude zero. */
     fun cancel() {
-
-        animator?.cancel()
-        animator = null
+        annotation?.let { manager?.delete(it) }
+        annotation = null
+        currentTarget = Point.fromLngLat(0.0, 0.0)
     }
 
-    private fun normalize(
-        degrees: Float
-    ): Float {
-
-        return (
-            (degrees % 360f) + 360f
-        ) % 360f
+    /** Normalizes an angle to degrees in the range [0, 360). */
+    private fun normalize(degrees: Float): Float {
+        return ((degrees % 360f) + 360f) % 360f
     }
 
-    private fun applyBearing(
-        bearing: Float
-    ) {
+    /** Returns the last stored vehicle target, or the zero coordinate before updates or after cancellation. */
+    fun currentTarget(): Point = currentTarget
+    /** Returns the last normalized vehicle bearing in degrees. */
+    fun currentBearing(): Float = shownBearing
 
-        val normalized =
-            normalize(bearing)
-
-        shownBearing = normalized
-
-        if (
-            !drawnBearing.isNaN() &&
-            angleDifference(
-                drawnBearing,
-                normalized
-            ) < REDRAW_ANGLE_DEGREES
-        ) {
-            return
+    /** Creates the blue vehicle arrow bitmap with a white outline and a shadow. */
+    private fun createVehicleBitmap(): Bitmap {
+        val size = 64
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(60, 0, 0, 0)
+        }
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(59, 130, 246)
+            style = Paint.Style.FILL
+        }
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 5f
+            strokeJoin = Paint.Join.ROUND
         }
 
-        drawnBearing = normalized
-
-        val size = baseBitmap.width
-
-        val rotated =
-            Bitmap.createBitmap(
-                size,
-                size,
-                Bitmap.Config.ARGB_8888
-            )
-
-        val canvas = Canvas(rotated)
-
-        canvas.rotate(
-            normalized,
-            size / 2f,
-            size / 2f
-        )
-
-        canvas.drawBitmap(
-            baseBitmap,
-            0f,
-            0f,
-            null
-        )
-
-        marker.icon =
-            BitmapDrawable(
-                resources,
-                rotated
-            )
-    }
-
-    private fun angleDifference(
-        a: Float,
-        b: Float
-    ): Float {
-
-        return abs(
-            (a - b + 540f) %
-                360f - 180f
-        )
+        canvas.drawCircle(size / 2f, size / 2f + 3f, 22f, shadowPaint)
+        val arrow = Path().apply {
+            moveTo(size / 2f, 9f)
+            lineTo(51f, 51f)
+            lineTo(size / 2f, 42f)
+            lineTo(13f, 51f)
+            close()
+        }
+        canvas.drawPath(arrow, fillPaint)
+        canvas.drawPath(arrow, strokePaint)
+        return bitmap
     }
 }
 
-private fun drawCarBitmap(
-    context: Context
-): Bitmap {
+internal class CurrentLocationMarker {
+    private var manager: PointAnnotationManager? = null
+    private var annotation: PointAnnotation? = null
+    private val icon by lazy { createCurrentLocationBitmap() }
 
-    val size =
-        (
-            56 *
-                context.resources.displayMetrics.density
-        )
-            .toInt()
-            .coerceAtLeast(64)
-
-    val s = size.toFloat()
-
-    val bitmap =
-        Bitmap.createBitmap(
-            size,
-            size,
-            Bitmap.Config.ARGB_8888
-        )
-
-    val canvas = Canvas(bitmap)
-
-    val cx = s / 2f
-
-    val bodyWidth = 0.46f * s
-    val bodyLength = 0.86f * s
-
-    val top = (s - bodyLength) / 2f
-    val left = cx - bodyWidth / 2f
-
-    val body =
-        RectF(
-            left,
-            top,
-            left + bodyWidth,
-            top + bodyLength
-        )
-
-    fun paint(argb: Int) =
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = argb
-        }
-
-    canvas.drawRoundRect(
-        RectF(
-            body.left - 0.02f * s,
-            body.top + 0.03f * s,
-            body.right + 0.02f * s,
-            body.bottom + 0.03f * s
-        ),
-        0.18f * s,
-        0.18f * s,
-        paint(0x33000000)
-    )
-
-    val wheelPaint =
-        paint(0xFF1F2937.toInt())
-
-    val wheelWidth = 0.05f * s
-    val wheelHeight = 0.15f * s
-
-    for (fraction in listOf(0.2f, 0.74f)) {
-
-        val wheelTop =
-            top + bodyLength * fraction
-
-        canvas.drawRoundRect(
-            RectF(
-                body.left - wheelWidth * 0.6f,
-                wheelTop,
-                body.left + wheelWidth * 0.4f,
-                wheelTop + wheelHeight
-            ),
-            3f,
-            3f,
-            wheelPaint
-        )
-
-        canvas.drawRoundRect(
-            RectF(
-                body.right - wheelWidth * 0.4f,
-                wheelTop,
-                body.right + wheelWidth * 0.6f,
-                wheelTop + wheelHeight
-            ),
-            3f,
-            3f,
-            wheelPaint
-        )
+    /** Attaches the location marker to a manager, removing its annotation from the previous manager when changed. */
+    fun bind(manager: PointAnnotationManager) {
+        if (this.manager === manager) return
+        annotation?.let { this.manager?.delete(it) }
+        annotation = null
+        this.manager = manager
     }
 
-    canvas.drawRoundRect(
-        body,
-        0.17f * s,
-        0.17f * s,
-        paint(0xFFFFFFFF.toInt())
-    )
+    /** Creates or moves the current-location annotation when a manager is bound. */
+    fun update(target: Point) {
+        val pointManager = manager ?: return
+        val existing = annotation
+        if (existing == null) {
+            annotation = pointManager.create(
+                PointAnnotationOptions()
+                    .withPoint(target)
+                    .withIconImage(icon)
+                    .withIconSize(1.0)
+            )
+        } else {
+            existing.point = target
+            pointManager.update(existing)
+        }
+    }
 
-    val inset = 0.03f * s
+    /** Removes the current-location annotation from its manager. */
+    fun cancel() {
+        annotation?.let { manager?.delete(it) }
+        annotation = null
+    }
 
-    val inner =
-        RectF(
-            body.left + inset,
-            body.top + inset,
-            body.right - inset,
-            body.bottom - inset
-        )
+    /** Creates the blue current-location dot bitmap with a translucent halo and a white border. */
+    private fun createCurrentLocationBitmap(): Bitmap {
+        val size = 72
+        val center = size / 2f
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(45, 59, 130, 246)
+            style = Paint.Style.FILL
+        }
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(59, 130, 246)
+            style = Paint.Style.FILL
+        }
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 5f
+        }
 
-    canvas.drawRoundRect(
-        inner,
-        0.14f * s,
-        0.14f * s,
-        paint(0xFF3B82F6.toInt())
-    )
-
-    val glass =
-        paint(0xFF1E293B.toInt())
-
-    val glassWidth = 0.34f * s
-
-    fun glassBand(
-        fromFraction: Float,
-        toFraction: Float
-    ) =
-        RectF(
-            cx - glassWidth / 2f,
-            top + bodyLength * fromFraction,
-            cx + glassWidth / 2f,
-            top + bodyLength * toFraction
-        )
-
-    canvas.drawRoundRect(
-        glassBand(0.20f, 0.38f),
-        0.05f * s,
-        0.05f * s,
-        glass
-    )
-
-    canvas.drawRoundRect(
-        glassBand(0.40f, 0.62f),
-        0.03f * s,
-        0.03f * s,
-        paint(0xFF60A5FA.toInt())
-    )
-
-    canvas.drawRoundRect(
-        glassBand(0.64f, 0.78f),
-        0.04f * s,
-        0.04f * s,
-        glass
-    )
-
-    val headlight =
-        paint(0xFFFFF59D.toInt())
-
-    canvas.drawCircle(
-        cx - 0.13f * s,
-        top + 0.045f * bodyLength + inset,
-        0.035f * s,
-        headlight
-    )
-
-    canvas.drawCircle(
-        cx + 0.13f * s,
-        top + 0.045f * bodyLength + inset,
-        0.035f * s,
-        headlight
-    )
-
-    val taillight =
-        paint(0xFFEF4444.toInt())
-
-    canvas.drawCircle(
-        cx - 0.13f * s,
-        top + bodyLength - 0.045f * bodyLength - inset,
-        0.03f * s,
-        taillight
-    )
-
-    canvas.drawCircle(
-        cx + 0.13f * s,
-        top + bodyLength - 0.045f * bodyLength - inset,
-        0.03f * s,
-        taillight
-    )
-
-    return bitmap
+        canvas.drawCircle(center, center, 28f, outerPaint)
+        canvas.drawCircle(center, center, 13f, fillPaint)
+        canvas.drawCircle(center, center, 13f, strokePaint)
+        return bitmap
+    }
 }

@@ -40,6 +40,7 @@ class TokenAuthenticator(
      */
     private val lock = ReentrantLock()
 
+    /** Retries once with a current or refreshed bearer token; returns null when authentication cannot proceed. */
     override fun authenticate(route: Route?, response: Response): Request? {
         // Give up after one attempt: if the replay also 401s, retrying loops.
         if (response.priorResponse != null) return null
@@ -79,7 +80,7 @@ class TokenAuthenticator(
             }
 
             val data = refreshed.data
-            if (!refreshed.success || data == null || data.accessToken.isBlank()) {
+            if (refreshed.success == false || data == null || data.accessToken.isBlank()) {
                 endSession()
                 return@withLock null
             }

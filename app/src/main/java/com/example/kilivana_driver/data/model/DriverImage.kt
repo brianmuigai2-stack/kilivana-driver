@@ -7,12 +7,20 @@ import kotlinx.serialization.Serializable
  * The envelope every Kilivana endpoint wraps its payload in.
  *
  * [data] is the endpoint-specific payload, so this stays generic and is used
- * as `ApiResponse<List<DriverImage>>` and friends. The `error` object is only
- * populated on failures, so both of its fields are nullable and default to null.
+ * as `ApiResponse<List<DriverImage>>` and friends.
+ *
+ * [success] is nullable (rather than a plain `Boolean` with a default) because
+ * some backend paths explicitly send `"success": null`. kotlinx.serialization
+ * applies the `= false` default only when the key is *absent*, and throws on an
+ * explicit `null` for a non-null field. Making it nullable lets `null` parse,
+ * and consumers use `!= false` so that `null` (or `true`) is treated as success
+ * as long as data is present; only an explicit `false` is a hard failure. The
+ * `error` object is only populated on failures, so both of its fields are
+ * nullable and default to null.
  */
 @Serializable
 data class ApiResponse<T>(
-    val success: Boolean = false,
+    val success: Boolean? = false,
     val message: String = "",
     val data: T? = null,
     val timestamp: String = "",
@@ -45,7 +53,7 @@ data class DriverImage(
     val publicId: String = "",
     val assetId: String? = null,
     val sortOrder: Int = 0,
-    val isPrimary: Boolean = false,
+    val isPrimary: Boolean? = false,
     val createdAt: String = "",
     val updatedAt: String = ""
 )

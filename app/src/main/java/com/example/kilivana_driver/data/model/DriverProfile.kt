@@ -29,7 +29,7 @@ data class DriverProfile(
      * does not need a second request just to render a header photo.
      */
     val primaryImage: DriverImage?
-        get() = images?.firstOrNull { it.isPrimary } ?: images?.minByOrNull { it.sortOrder }
+        get() = images?.firstOrNull { it.isPrimary == true } ?: images?.minByOrNull { it.sortOrder }
 }
 
 /**

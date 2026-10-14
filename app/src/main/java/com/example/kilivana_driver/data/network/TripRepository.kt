@@ -83,7 +83,7 @@ class TripRepository(
         val request = StartTrackingRequest(tripId = job.id, driverId = userId)
         try {
             val response = api.startTracking(job.id, request)
-            if (response.success) {
+            if (response.success != false) {
                 _activeTripId.value = job.id
                 _tripStage.value = TripStage.HEADING_TO_PICKUP
                 // Clear any stale offline queue from a previous trip.
@@ -115,7 +115,7 @@ class TripRepository(
      * here and in TripApi.
      */
     fun advanceToInTransit() {
-        if (_tripStage.value == TripStage.HEADING_TO_PICKUP) {
+        if (_tripStage.value == null || _tripStage.value == TripStage.HEADING_TO_PICKUP) {
             _tripStage.value = TripStage.IN_TRANSIT
         }
     }
@@ -146,7 +146,7 @@ class TripRepository(
         val request = StopTrackingRequest(tripId = tripId, driverId = userId, reason = reason)
         try {
             val response = api.stopTracking(tripId, request)
-            val success = response.success
+            val success = response.success != false
             if (success) {
                 _tripStage.value = when (reason) {
                     "COMPLETED" -> TripStage.DELIVERED
@@ -181,7 +181,7 @@ class TripRepository(
         val tripId = _activeTripId.value ?: return@withContext null
         try {
             val response = api.getTripStatus(tripId)
-            if (response.success && response.data != null) {
+            if (response.success != false && response.data != null) {
                 _backendStatus.value = response.data
                 // Update local stage from backend status if it differs.
                 updateStageFromBackend(response.data!!)
@@ -217,7 +217,7 @@ class TripRepository(
         val userId = SessionStore.userId ?: return@withContext null
         try {
             val response = api.getActiveTrips()
-            if (response.success && response.data != null && response.data!!.isNotEmpty()) {
+            if (response.success != false && response.data != null && response.data!!.isNotEmpty()) {
                 // Backend should return at most one active trip per driver.
                 val status = response.data!!.first()
                 _activeTripId.value = status.tripId
