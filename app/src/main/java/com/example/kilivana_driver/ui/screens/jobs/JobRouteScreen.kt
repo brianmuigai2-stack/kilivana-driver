@@ -3,6 +3,8 @@ package com.example.kilivana_driver.ui.screens.jobs
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.view.MotionEvent
+import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -23,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -128,6 +131,7 @@ fun JobRouteScreen(
     // Convert backend TripStage to UI stage
     val uiStage = remember { mutableStateOf(UiTripStage.HEADING_TO_PICKUP) }
     var hasFramedRoute by remember { mutableStateOf(false) }
+    var isCameraFollowing by remember { mutableStateOf(true) }
     LaunchedEffect(tripStage) {
         uiStage.value = when (tripStage) {
             com.example.kilivana_driver.data.model.TripStage.HEADING_TO_PICKUP -> UiTripStage.HEADING_TO_PICKUP
@@ -138,6 +142,7 @@ fun JobRouteScreen(
         }
         // Reset framing when stage changes so it re-frames for the new route
         hasFramedRoute = false
+        isCameraFollowing = true
     }
 
     // GPS location stream
@@ -188,9 +193,20 @@ fun JobRouteScreen(
             }
         }
 
+        // Any touch on the map means the user wants to control the camera
+        // manually — stop auto-following so zoom/pan isn't overridden by GPS.
+        val touchListener = View.OnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                isCameraFollowing = false
+            }
+            false
+        }
+        mapView.setOnTouchListener(touchListener)
+
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            mapView.setOnTouchListener(null)
             mapView.onStop()
         }
     }
@@ -265,23 +281,25 @@ fun JobRouteScreen(
             UiTripStage.DELIVERED -> dropoffPoint
         }
 
-        mapView.getMapboxMap().setCamera(
-            CameraOptions.Builder()
-                .center(Point.fromLngLat(fix.longitude, fix.latitude))
-                .zoom(15.0)
-                .pitch(ROUTE_CAMERA_PITCH)
-                .build()
-        )
-
-        if (!hasFramedRoute) {
+        if (isCameraFollowing) {
             mapView.getMapboxMap().setCamera(
                 CameraOptions.Builder()
-                    .center(Point.fromLngLat((fix.longitude + target.longitude) / 2.0, (fix.latitude + target.latitude) / 2.0))
-                    .zoom(12.5)
+                    .center(Point.fromLngLat(fix.longitude, fix.latitude))
+                    .zoom(15.0)
                     .pitch(ROUTE_CAMERA_PITCH)
                     .build()
             )
-            hasFramedRoute = true
+
+            if (!hasFramedRoute) {
+                mapView.getMapboxMap().setCamera(
+                    CameraOptions.Builder()
+                        .center(Point.fromLngLat((fix.longitude + target.longitude) / 2.0, (fix.latitude + target.latitude) / 2.0))
+                        .zoom(12.5)
+                        .pitch(ROUTE_CAMERA_PITCH)
+                        .build()
+                )
+                hasFramedRoute = true
+            }
         }
     }
 
@@ -414,6 +432,46 @@ fun JobRouteScreen(
                         color = KilivanaNotificationRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+
+        // Recenter button (top-right), only shown when not already following
+        if (!isCameraFollowing) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 12.dp, end = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .shadow(2.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(KilivanaWhite)
+                        .clickable(onClick = {
+                            isCameraFollowing = true
+                            hasFramedRoute = true
+                            location?.let { fix ->
+                                mapView.getMapboxMap().setCamera(
+                                    CameraOptions.Builder()
+                                        .center(Point.fromLngLat(fix.longitude, fix.latitude))
+                                        .zoom(15.0)
+                                        .pitch(ROUTE_CAMERA_PITCH)
+                                        .build()
+                                )
+                            }
+                        }),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MyLocation,
+                        contentDescription = "Recenter on my location",
+                        tint = KilivanaTextPrimary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
