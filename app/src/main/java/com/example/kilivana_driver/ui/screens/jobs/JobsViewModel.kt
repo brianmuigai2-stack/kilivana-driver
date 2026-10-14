@@ -59,9 +59,10 @@ class JobsViewModel(
                 if (user != null && user.id != currentUserId) {
                     // Different driver: wipe the stale list immediately so
                     // the old jobs are never shown to the new owner.
+                    // Note: we do NOT set isLoading=true here — refresh()
+                    // reads its own guard and sets it internally.
                     _uiState.update {
                         it.copy(
-                            isLoading = true,
                             jobs = emptyList(),
                             errorMessage = null
                         )

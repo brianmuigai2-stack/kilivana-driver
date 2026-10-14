@@ -194,8 +194,13 @@ fun MapScreen(
 
         Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
+                .align(Alignment.BottomEnd)
+                .padding(
+                    top = 16.dp,
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = if (activeJob != null) 110.dp else 16.dp
+                )
                 .clip(CircleShape)
                 .background(KilivanaWhite)
                 .clickable {
