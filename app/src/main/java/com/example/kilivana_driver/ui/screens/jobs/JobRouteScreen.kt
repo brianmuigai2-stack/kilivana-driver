@@ -1,13 +1,8 @@
 package com.example.kilivana_driver.ui.screens.jobs
 
-import android.app.Application
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.RectF
-import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.Drawable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -35,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,7 +40,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -52,13 +47,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import com.example.kilivana_driver.data.model.Job
-import com.example.kilivana_driver.data.model.TripStage
 import com.example.kilivana_driver.data.routing.RouteRepository
 import com.example.kilivana_driver.ui.components.KilivanaButton
 import com.example.kilivana_driver.ui.screens.map.CarMarker
+import com.example.kilivana_driver.ui.screens.map.GeoPoint
 import com.example.kilivana_driver.ui.screens.map.HeadingTracker
 import com.example.kilivana_driver.ui.screens.map.rememberUserLocation
 import com.example.kilivana_driver.ui.theme.KilivanaAmber
@@ -70,31 +69,35 @@ import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
+import com.mapbox.geojson.Point
+import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.MapInitOptions
+import com.mapbox.maps.MapView
+import com.mapbox.maps.Style
+import com.mapbox.maps.extension.style.layers.properties.generated.IconAnchor
+import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
+import com.mapbox.maps.extension.style.layers.properties.generated.TextAnchor
+import com.mapbox.maps.plugin.Plugin
+import com.mapbox.maps.plugin.annotation.AnnotationConfig
+import com.mapbox.maps.plugin.annotation.AnnotationPlugin
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.XYTileSource
-import org.osmdroid.util.BoundingBox
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.CustomZoomButtonsController
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Polyline
 
 private enum class UiTripStage { HEADING_TO_PICKUP, IN_TRANSIT, DELIVERED }
-
-/*
- * OpenStreetMap requires a meaningful User-Agent. Keep this identical to
- * the one used in MapScreen.kt so both screens comply with OSM's tile
- * usage policy the same way.
- */
-private const val OSM_USER_AGENT =
-    "KilivanaDriver/1.0 (Kilivana agricultural logistics app)"
 
 private const val DRIVER_BLUE = 0xFF3B82F6.toInt()
 private const val FARMER_GREEN = 0xFF2E7D32.toInt()
 private const val BUYER_RED = 0xFFE53935.toInt()
+private const val ROUTE_LINE = 0xFF1F6B2E.toInt()
+private const val PREVIEW_LINE = 0xFF8A94A6.toInt()
+private const val TRACKING_LINE = 0xFF3B82F6.toInt()
+private const val ROUTE_CAMERA_PITCH = 45.0
 
 @Composable
 fun JobRouteScreen(
@@ -109,6 +112,7 @@ fun JobRouteScreen(
     // Initialize the ViewModel with the job
     LaunchedEffect(job.id) {
         tripViewModel.initialize(job)
+        tripViewModel.startTrip()
     }
 
     // Collect state from ViewModel
@@ -140,68 +144,54 @@ fun JobRouteScreen(
     val location by rememberUserLocation(enabled = true)
 
     // Fixed points
-    val pickupPoint = remember { GeoPoint(job.pickupLat, job.pickupLon) }
-    val dropoffPoint = remember { GeoPoint(job.dropoffLat, job.dropoffLon) }
+    val pickupPoint = remember(job.id) { GeoPoint(job.pickupLat, job.pickupLon) }
+    val dropoffPoint = remember(job.id) { GeoPoint(job.dropoffLat, job.dropoffLon) }
     val targetPoint = when (uiStage.value) {
         UiTripStage.HEADING_TO_PICKUP -> pickupPoint
         UiTripStage.IN_TRANSIT -> dropoffPoint
         UiTripStage.DELIVERED -> dropoffPoint
     }
 
-    // Map setup
+    val lifecycleOwner = LocalLifecycleOwner.current
+
     val mapView = remember {
-        Configuration.getInstance().apply {
-            load(context, context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
-            userAgentValue = OSM_USER_AGENT
+        MapView(context, MapInitOptions(context))
+    }
+    var styleLoaded by remember { mutableStateOf(false) }
+    var routeMapAnnotations by remember { mutableStateOf<RouteMapAnnotations?>(null) }
+    val carMarker = remember { CarMarker() }
+
+    DisposableEffect(mapView) {
+        mapView.getMapboxMap().loadStyleUri(Style.STANDARD) {
+            styleLoaded = true
+            val center = Point.fromLngLat(pickupPoint.longitude, pickupPoint.latitude)
+            mapView.getMapboxMap().setCamera(
+                CameraOptions.Builder()
+                    .center(center)
+                    .zoom(12.0)
+                    .pitch(30.0)
+                    .build()
+            )
         }
 
-        val tileSource = XYTileSource(
-            "MAPNIK",
-            0,
-            19,
-            256,
-            ".png",
-            arrayOf("https://tile.openstreetmap.org/"),
-            OSM_USER_AGENT
-        )
-
-        MapView(context).apply {
-            setTileSource(tileSource)
-            setMultiTouchControls(true)
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-            controller.setZoom(13.0)
-            controller.setCenter(pickupPoint)
+        onDispose {
+            mapView.onDestroy()
         }
     }
 
-    // Markers
-    val pickupMarker = remember {
-        Marker(mapView).apply {
-            position = pickupPoint
-            icon = labeledMarkerDrawable(context, "Farmer", FARMER_GREEN)
-            setAnchor(0.5f, pinAnchorFraction(context))
-            title = job.pickupPlace
+    DisposableEffect(lifecycleOwner, mapView) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> mapView.onStart()
+                Lifecycle.Event.ON_STOP -> mapView.onStop()
+                else -> Unit
+            }
         }
-    }
-    val dropoffMarker = remember {
-        Marker(mapView).apply {
-            position = dropoffPoint
-            icon = labeledMarkerDrawable(context, "Buyer", BUYER_RED)
-            setAnchor(0.5f, pinAnchorFraction(context))
-            title = job.dropoffPlace
-        }
-    }
 
-    // Car marker for smooth animation
-    val carMarker = remember { CarMarker(mapView, context) }
-
-    // Route lines
-    val pickupLine = remember { Polyline().apply { outlinePaint.strokeWidth = 9f } }
-    val dropoffLine = remember { Polyline().apply { outlinePaint.strokeWidth = 9f } }
-    val trackingLine = remember {
-        Polyline().apply {
-            outlinePaint.strokeWidth = 12f
-            outlinePaint.color = KilivanaTextMuted.copy(alpha = 0.5f).toArgb()
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            mapView.onStop()
         }
     }
 
@@ -223,82 +213,76 @@ fun JobRouteScreen(
         location?.let { tripViewModel.onLocationUpdate(it) }
     }
 
+    LaunchedEffect(styleLoaded, mapView) {
+        if (!styleLoaded || routeMapAnnotations != null) return@LaunchedEffect
+        val annotationPlugin = mapView.getPlugin<AnnotationPlugin>(Plugin.MAPBOX_ANNOTATION_PLUGIN_ID)
+            ?: return@LaunchedEffect
+        routeMapAnnotations = RouteMapAnnotations(
+            stopPointManager = annotationPlugin.createPointAnnotationManager(AnnotationConfig()),
+            vehiclePointManager = annotationPlugin.createPointAnnotationManager(AnnotationConfig()),
+            lineManager = annotationPlugin.createPolylineAnnotationManager(AnnotationConfig())
+        ).also { carMarker.bind(it.vehiclePointManager) }
+    }
+
+    DisposableEffect(routeMapAnnotations) {
+        val annotations = routeMapAnnotations ?: return@DisposableEffect onDispose {}
+        onDispose {
+            carMarker.cancel()
+            annotations.destroy()
+        }
+    }
+
+    LaunchedEffect(routeMapAnnotations, pickupPoint, dropoffPoint, trackingPoints) {
+        routeMapAnnotations?.drawPoints(
+            pickupPoint = pickupPoint,
+            dropoffPoint = dropoffPoint,
+            trackingPoints = trackingPoints
+        )
+    }
+
+    LaunchedEffect(routeMapAnnotations, routePoints, previewRouteToBuyer, trackingPoints) {
+        routeMapAnnotations?.drawLines(
+            activeRoute = routePoints,
+            previewRoute = previewRouteToBuyer,
+            trackingPoints = trackingPoints
+        )
+    }
+
     // Update car marker position and heading
     LaunchedEffect(location, tripViewModel) {
         val fix = location ?: return@LaunchedEffect
         val vehiclePos = GeoPoint(fix.latitude, fix.longitude)
         val heading = headingTracker.update(fix, targetPoint)
         tripViewModel.setCurrentHeading(heading)
-        carMarker.update(vehiclePos, heading)
+        carMarker.update(vehiclePos.toMapboxPoint(), heading)
     }
 
-    // Draw overlays
-    val displayedDropoffRoute = if (uiStage.value == UiTripStage.IN_TRANSIT) routePoints else previewRouteToBuyer
-
-    LaunchedEffect(routePoints, displayedDropoffRoute, uiStage.value, location, trackingPoints) {
-        mapView.overlays.clear()
-
-        val activeAlpha = 255
-        val dimAlpha = 90
-
-        // Pickup route (green)
-        if (uiStage.value == UiTripStage.HEADING_TO_PICKUP) {
-            routePoints?.let { points ->
-                pickupLine.setPoints(points)
-                pickupLine.outlinePaint.color = KilivanaGreen.toArgb()
-                pickupLine.outlinePaint.alpha = activeAlpha
-                mapView.overlays.add(pickupLine)
-            }
-        } else if (uiStage.value == UiTripStage.IN_TRANSIT) {
-            routePoints?.let { points ->
-                pickupLine.setPoints(points)
-                pickupLine.outlinePaint.color = KilivanaGreen.toArgb()
-                pickupLine.outlinePaint.alpha = dimAlpha
-                mapView.overlays.add(pickupLine)
-            }
+    LaunchedEffect(location, uiStage.value) {
+        val fix = location ?: return@LaunchedEffect
+        val target = when (uiStage.value) {
+            UiTripStage.HEADING_TO_PICKUP -> pickupPoint
+            UiTripStage.IN_TRANSIT -> dropoffPoint
+            UiTripStage.DELIVERED -> dropoffPoint
         }
 
-        // Dropoff route (red)
-        displayedDropoffRoute?.let { points ->
-            dropoffLine.setPoints(points)
-            dropoffLine.outlinePaint.color = KilivanaNotificationRed.toArgb()
-            dropoffLine.outlinePaint.alpha = if (uiStage.value == UiTripStage.IN_TRANSIT) activeAlpha else dimAlpha
-            mapView.overlays.add(dropoffLine)
-        }
+        mapView.getMapboxMap().setCamera(
+            CameraOptions.Builder()
+                .center(Point.fromLngLat(fix.longitude, fix.latitude))
+                .zoom(15.0)
+                .pitch(ROUTE_CAMERA_PITCH)
+                .build()
+        )
 
-        // Tracking history (dotted gray line from the backend)
-        if (trackingPoints.isNotEmpty()) {
-            val geoPoints = trackingPoints.map { GeoPoint(it.latitude, it.longitude) }
-            trackingLine.setPoints(geoPoints)
-            trackingLine.outlinePaint.color = KilivanaTextMuted.toArgb()
-            trackingLine.outlinePaint.alpha = 180
-            mapView.overlays.add(trackingLine)
-        }
-
-        mapView.overlays.add(pickupMarker)
-        mapView.overlays.add(dropoffMarker)
-
-        // Frame the route for the current stage only
-        val shouldFrame = when (uiStage.value) {
-            UiTripStage.HEADING_TO_PICKUP -> location != null && routePoints != null
-            UiTripStage.IN_TRANSIT -> location != null && routePoints != null
-            else -> false
-        }
-        if (!hasFramedRoute && shouldFrame) {
-            val fix = location!!
-            val targetPoint = when (uiStage.value) {
-                UiTripStage.HEADING_TO_PICKUP -> pickupPoint
-                UiTripStage.IN_TRANSIT -> dropoffPoint
-                else -> pickupPoint
-            }
-            val box = BoundingBox.fromGeoPoints(
-                listOf(GeoPoint(fix.latitude, fix.longitude), targetPoint)
+        if (!hasFramedRoute) {
+            mapView.getMapboxMap().setCamera(
+                CameraOptions.Builder()
+                    .center(Point.fromLngLat((fix.longitude + target.longitude) / 2.0, (fix.latitude + target.latitude) / 2.0))
+                    .zoom(12.5)
+                    .pitch(ROUTE_CAMERA_PITCH)
+                    .build()
             )
-            mapView.zoomToBoundingBox(box, true, 140)
             hasFramedRoute = true
         }
-
-        mapView.invalidate()
     }
 
     var showOtpDialog by remember { mutableStateOf(false) }
@@ -520,6 +504,134 @@ fun JobRouteScreen(
     }
 }
 
+private class RouteMapAnnotations(
+    val stopPointManager: PointAnnotationManager,
+    val vehiclePointManager: PointAnnotationManager,
+    private val lineManager: PolylineAnnotationManager
+) {
+    private val pickupIcon by lazy { createCircleBitmap(FARMER_GREEN) }
+    private val dropoffIcon by lazy { createCircleBitmap(BUYER_RED) }
+    private val trackingIcon by lazy { createCircleBitmap(DRIVER_BLUE, radius = 9f) }
+
+    fun drawPoints(
+        pickupPoint: GeoPoint,
+        dropoffPoint: GeoPoint,
+        trackingPoints: List<TrackingHistoryPoint>
+    ) {
+        stopPointManager.deleteAll()
+        stopPointManager.create(
+            PointAnnotationOptions()
+                .withPoint(pickupPoint.toMapboxPoint())
+                .withIconImage(pickupIcon)
+                .withIconAnchor(IconAnchor.BOTTOM)
+                .withTextField("Pickup")
+                .withTextAnchor(TextAnchor.TOP)
+                .withTextOffset(listOf(0.0, 0.4))
+                .withTextSize(12.0)
+                .withTextColor(FARMER_GREEN)
+                .withTextHaloColor(android.graphics.Color.WHITE)
+                .withTextHaloWidth(1.5)
+        )
+        stopPointManager.create(
+            PointAnnotationOptions()
+                .withPoint(dropoffPoint.toMapboxPoint())
+                .withIconImage(dropoffIcon)
+                .withIconAnchor(IconAnchor.BOTTOM)
+                .withTextField("Dropoff")
+                .withTextAnchor(TextAnchor.TOP)
+                .withTextOffset(listOf(0.0, 0.4))
+                .withTextSize(12.0)
+                .withTextColor(BUYER_RED)
+                .withTextHaloColor(android.graphics.Color.WHITE)
+                .withTextHaloWidth(1.5)
+        )
+
+        trackingPoints.lastOrNull()?.let { latest ->
+            stopPointManager.create(
+                PointAnnotationOptions()
+                    .withPoint(Point.fromLngLat(latest.longitude, latest.latitude))
+                    .withIconImage(trackingIcon)
+                    .withIconAnchor(IconAnchor.CENTER)
+                    .withTextField("Last ping")
+                    .withTextAnchor(TextAnchor.BOTTOM)
+                    .withTextOffset(listOf(0.0, -0.35))
+                    .withTextSize(11.0)
+                    .withTextColor(DRIVER_BLUE)
+                    .withTextHaloColor(android.graphics.Color.WHITE)
+                    .withTextHaloWidth(1.5)
+            )
+        }
+    }
+
+    fun drawLines(
+        activeRoute: List<GeoPoint>?,
+        previewRoute: List<GeoPoint>?,
+        trackingPoints: List<TrackingHistoryPoint>
+    ) {
+        lineManager.deleteAll()
+        previewRoute?.takeIf { it.size >= 2 }?.let {
+            lineManager.createPolyline(it, PREVIEW_LINE, width = 3.0, opacity = 0.55)
+        }
+        activeRoute?.takeIf { it.size >= 2 }?.let {
+            lineManager.createPolyline(it, ROUTE_LINE, width = 5.0, opacity = 0.95)
+        }
+        trackingPoints
+            .map { GeoPoint(it.latitude, it.longitude) }
+            .takeIf { it.size >= 2 }
+            ?.let { lineManager.createPolyline(it, TRACKING_LINE, width = 3.0, opacity = 0.65) }
+    }
+
+    fun destroy() {
+        stopPointManager.onDestroy()
+        vehiclePointManager.onDestroy()
+        lineManager.onDestroy()
+    }
+
+    private fun PolylineAnnotationManager.createPolyline(
+        points: List<GeoPoint>,
+        color: Int,
+        width: Double,
+        opacity: Double
+    ) {
+        create(
+            PolylineAnnotationOptions()
+                .withPoints(points.map { it.toMapboxPoint() })
+                .withLineColor(color)
+                .withLineWidth(width)
+                .withLineOpacity(opacity)
+                .withLineJoin(LineJoin.ROUND)
+        )
+    }
+}
+
+private fun createCircleBitmap(
+    color: Int,
+    radius: Float = 13f
+): Bitmap {
+    val size = 48
+    val center = size / 2f
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        style = Paint.Style.FILL
+    }
+    val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = android.graphics.Color.WHITE
+        style = Paint.Style.STROKE
+        strokeWidth = 5f
+    }
+    val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = android.graphics.Color.argb(45, 0, 0, 0)
+        style = Paint.Style.FILL
+    }
+
+    canvas.drawCircle(center, center + 2f, radius + 2f, shadow)
+    canvas.drawCircle(center, center, radius, fill)
+    canvas.drawCircle(center, center, radius, stroke)
+    return bitmap
+}
+
 @Composable
 private fun OtpDialog(
     jobId: String,
@@ -604,80 +716,6 @@ private fun TripStep(
             fontWeight = if (current) FontWeight.Bold else FontWeight.Normal
         )
     }
-}
-
-private fun Color.toArgb(): Int {
-    return android.graphics.Color.argb(
-        (alpha * 255).toInt(), (red * 255).toInt(), (green * 255).toInt(), (blue * 255).toInt()
-    )
-}
-
-/**
- * A small color-coded label bubble ("You" / "Farmer" / "Buyer") sitting
- * above a pin dot, drawn as a single bitmap so it can be used as a marker
- * icon. The pin's exact point (not the bubble) marks the real location.
- */
-private fun labeledMarkerDrawable(context: Context, label: String, markerColor: Int): Drawable {
-    val density = context.resources.displayMetrics.density
-    val pinRadius = 9f * density
-    val pinStroke = 3f * density
-    val gap = 4f * density
-    val bubblePaddingH = 10f * density
-    val bubblePaddingV = 5f * density
-    val textSize = 12f * density
-
-    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.WHITE
-        this.textSize = textSize
-        isFakeBoldText = true
-        textAlign = Paint.Align.CENTER
-    }
-    val textWidth = textPaint.measureText(label)
-    val bubbleWidth = textWidth + bubblePaddingH * 2
-    val bubbleHeight = textSize + bubblePaddingV * 2
-
-    val totalWidth = maxOf(bubbleWidth, pinRadius * 2 + pinStroke * 2).toInt() + 4
-    val totalHeight = (bubbleHeight + gap + pinRadius * 2 + pinStroke).toInt() + 2
-
-    val bitmap = Bitmap.createBitmap(totalWidth, totalHeight, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val centerX = totalWidth / 2f
-
-    val bubbleRect = RectF(
-        centerX - bubbleWidth / 2f,
-        0f,
-        centerX + bubbleWidth / 2f,
-        bubbleHeight
-    )
-    val bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = markerColor }
-    canvas.drawRoundRect(bubbleRect, bubbleHeight / 2f, bubbleHeight / 2f, bubblePaint)
-    canvas.drawText(label, centerX, bubbleHeight / 2f - (textPaint.ascent() + textPaint.descent()) / 2f, textPaint)
-
-    val pinCenterY = bubbleHeight + gap + pinRadius
-    val pinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = markerColor }
-    canvas.drawCircle(centerX, pinCenterY, pinRadius, pinPaint)
-    val pinStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.color = android.graphics.Color.WHITE
-        style = Paint.Style.STROKE
-        strokeWidth = pinStroke
-    }
-    canvas.drawCircle(centerX, pinCenterY, pinRadius, pinStrokePaint)
-
-    return BitmapDrawable(context.resources, bitmap)
-}
-
-/** Vertical anchor (0..1) that lands exactly on the pin's center within [labeledMarkerDrawable]. */
-private fun pinAnchorFraction(context: Context): Float {
-    val density = context.resources.displayMetrics.density
-    val pinRadius = 9f * density
-    val pinStroke = 3f * density
-    val gap = 4f * density
-    val bubblePaddingV = 5f * density
-    val textSize = 12f * density
-    val bubbleHeight = textSize + bubblePaddingV * 2
-    val totalHeight = bubbleHeight + gap + pinRadius * 2 + pinStroke + 2
-    val pinCenterY = bubbleHeight + gap + pinRadius
-    return pinCenterY / totalHeight
 }
 
 @Preview(showSystemUi = true)

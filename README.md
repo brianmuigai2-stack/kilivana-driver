@@ -36,7 +36,7 @@ More (Profile) → Settings
 | Screens and navigation | Real |
 | GPS location | Real (Fused Location Provider) |
 | Map tiles | Real (OpenStreetMap) |
-| Road routes | Real (OSRM public demo server), with a straight-line fallback and an on-screen note if it fails |
+| Road routes | Real (Mapbox Directions API), with a straight-line fallback and an on-screen note if it fails |
 | Login | **Placeholder.** Any phone with 9+ digits and a password of 4+ characters gets in |
 | Profile (read, create, update, images) | **Real** — backed by `ProfileApi`/`ProfileRepository` |
 | Profile photo upload & delete | **Real** — multipart upload via UCrop, single-image delete |
@@ -56,7 +56,7 @@ More (Profile) → Settings
 - **Coil** for loading profile photos into the header and profile screen
 - **osmdroid** (OpenStreetMap) for maps
 - **Google Play Services Location** for GPS
-- **OSRM** public API for road routes (plain `HttpURLConnection`, no extra networking library)
+- **Mapbox Directions API** for road routes (OkHttp, using the same Mapbox access token as the map tiles)
 - **material-icons-extended** for icons
 
 ## Getting started
@@ -89,7 +89,7 @@ app/src/main/java/com/example/kilivana_driver/
 ├── data/
 │   ├── model/                   # Job, Driver, DriverProfile, DriverImage, Auth…
 │   │   └── network/             # ApiClient, ProfileApi/Repository, AuthApi/Repository, SessionStore
-│   └── routing/RouteRepository.kt   # Fetches road routes from OSRM
+│   └── routing/RouteRepository.kt   # Fetches road routes from Mapbox Directions
 └── ui/
     ├── components/              # KilivanaButton, KilivanaTextField,
     │                            # KilivanaBottomBar, KilivanaStatusBarScrim
@@ -121,7 +121,7 @@ app/src/main/res/drawable/       # kilivana_logo.jpg, splashscreen.jpg
 Both services used here are free public servers meant for development and light use:
 
 - **OpenStreetMap tiles** require an identifying User-Agent. The value is set in `MapScreen.kt` and `JobRouteScreen.kt` (`OSM_USER_AGENT`) and in `RouteRepository.kt` (`USER_AGENT`). Keep the three in sync, and add a contact address or website before shipping.
-- **The OSRM demo server** (`router.project-osrm.org`) isn't meant for production traffic.
+- **Mapbox Directions** (`api.mapbox.com`) is used for road-route calculation rather than the OSRM demo server (`router.project-osrm.org`), which is frequently unreachable from mobile networks and emulators (TCP-level connection timeouts on port 443). The app already ships with a Mapbox access token for map tiles, so Directions is the natural drop-in. The routing base URL is a single constant in `RouteRepository.kt`.
 
 For a real launch, point the map at a paid tile provider (or Google Maps) and the routing at a paid or self-hosted service. The routing base URL is a single constant in `RouteRepository.kt`.
 

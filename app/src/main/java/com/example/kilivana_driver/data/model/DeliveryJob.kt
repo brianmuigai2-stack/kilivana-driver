@@ -33,7 +33,14 @@ data class DeliveryJob(
     val destinationLatitude: Double = 0.0,
     val destinationLongitude: Double = 0.0,
     val cargoDescription: String? = null,
-    val quantity: Int = 0,
+    /**
+     * Nullable because the backend sends `null` when no cargo quantity is
+     * specified. Declaring it non-nullable with a default would throw on an
+     * explicit `null`: kotlinx.serialization only applies a default when the
+     * key is *absent*, not when it's present-but-null. See DriverImage.assetId
+     * for the same documented rationale.
+     */
+    val quantity: Int? = null,
     val payoutAmount: Double = 0.0,
     val scheduledPickupAt: String? = null,
     val scheduledDropoffAt: String? = null,
@@ -75,7 +82,7 @@ data class DeliveryJob(
         dropoffLat = destinationLatitude,
         dropoffLon = destinationLongitude,
         cargo = cargoDescription ?: "",
-        quantity = if (quantity > 0) "$quantity kg" else "",
+        quantity = if (quantity != null && quantity > 0) "$quantity kg" else "",
         distanceKm = distanceKm.roundToInt(),
         estimatedTime = formatMinutes(estimatedMinutes),
         payoutKsh = payoutAmount.toInt(),

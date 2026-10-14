@@ -1,14 +1,8 @@
 package com.example.kilivana_driver.ui.screens.map
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
-import android.location.Location
-import android.net.Uri
 import android.provider.Settings
-import android.view.MotionEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -21,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -44,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,35 +47,29 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import com.example.kilivana_driver.BuildConfig
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.ui.components.KilivanaButton
 import com.example.kilivana_driver.ui.theme.KilivanaGreen
-import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
 import com.example.kilivana_driver.ui.theme.KilivanaGreenTint
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
-import java.util.Locale
-import kotlin.math.max
-import kotlin.math.roundToInt
-import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.XYTileSource
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.CustomZoomButtonsController
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Polygon
+import com.mapbox.geojson.Point
+import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.MapInitOptions
+import com.mapbox.maps.MapView
+import com.mapbox.maps.Style
+import com.mapbox.maps.plugin.Plugin
+import com.mapbox.maps.plugin.annotation.AnnotationConfig
+import com.mapbox.maps.plugin.annotation.AnnotationPlugin
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 
 private const val NAIROBI_LAT = -1.286389
 private const val NAIROBI_LON = 36.817223
-private const val USER_ZOOM = 16.5
-
-/*
- * OpenStreetMap requires applications using its public tile server to
- * identify themselves with a meaningful User-Agent. Keep this stable and
- * bump the version when the app itself gets a new release.
- */
-private const val OSM_USER_AGENT = "KilivanaDriver/1.0 (Kilivana agricultural logistics app)"
+private const val USER_ZOOM = 17.25
+private const val USER_PITCH = 45.0
 
 @Composable
 fun MapScreen(
@@ -95,7 +83,6 @@ fun MapScreen(
     var servicesOn by remember { mutableStateOf(context.isLocationServicesOn()) }
     var permanentlyDenied by remember { mutableStateOf(false) }
     var resumeTick by remember { mutableStateOf(0) }
-    var followUser by remember { mutableStateOf(true) }
     var hasCentered by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -112,72 +99,68 @@ fun MapScreen(
         }
     }
 
-    // Real device location via the Fused Location Provider — the blue dot
-    // always reflects where the phone actually is, never a random position.
     val location by rememberUserLocation(enabled = hasPermission && servicesOn)
+    val lifecycleOwner = context as? LifecycleOwner
 
     val mapView = remember {
-        Configuration.getInstance().apply {
-            load(context, context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
-            userAgentValue = OSM_USER_AGENT
+        MapView(context, MapInitOptions(context))
+    }
+    var styleLoaded by remember { mutableStateOf(false) }
+    var currentLocationManager by remember { mutableStateOf<PointAnnotationManager?>(null) }
+    val currentLocationMarker = remember { CurrentLocationMarker() }
+
+    DisposableEffect(mapView) {
+        mapView.getMapboxMap().loadStyleUri(Style.STANDARD) {
+            styleLoaded = true
+            mapView.getMapboxMap().setCamera(
+                CameraOptions.Builder()
+                    .center(Point.fromLngLat(NAIROBI_LON, NAIROBI_LAT))
+                    .zoom(14.0)
+                    .pitch(30.0)
+                    .build()
+            )
         }
 
-        // Custom tile source so requests carry our User-Agent instead of the
-        // default one OSM's servers reject (per OSM's tile usage policy).
-        val tileSource = XYTileSource(
-            "MAPNIK", 0, 19, 256, ".png",
-            arrayOf("https://tile.openstreetmap.org/"),
-            OSM_USER_AGENT
-        )
-
-        MapView(context).apply {
-            setTileSource(tileSource)
-            setMultiTouchControls(true)
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-            minZoomLevel = 4.0
-            maxZoomLevel = 19.5
-            controller.setZoom(14.0)
-            controller.setCenter(GeoPoint(NAIROBI_LAT, NAIROBI_LON))
-            setOnTouchListener { _, event ->
-                if (event.action == MotionEvent.ACTION_MOVE) followUser = false
-                false
-            }
+        onDispose {
+            mapView.onDestroy()
         }
     }
 
-    val accuracyCircle = remember {
-        Polygon().apply {
-            fillPaint.color = 0x223B82F6
-            outlinePaint.color = 0x553B82F6
-            outlinePaint.strokeWidth = 2f
+    LaunchedEffect(styleLoaded, mapView) {
+        if (!styleLoaded || currentLocationManager != null) return@LaunchedEffect
+        val annotationPlugin = mapView.getPlugin<AnnotationPlugin>(Plugin.MAPBOX_ANNOTATION_PLUGIN_ID)
+            ?: return@LaunchedEffect
+        currentLocationManager = annotationPlugin
+            .createPointAnnotationManager(AnnotationConfig())
+            .also { currentLocationMarker.bind(it) }
+    }
+
+    DisposableEffect(currentLocationManager) {
+        val manager = currentLocationManager ?: return@DisposableEffect onDispose {}
+        onDispose {
+            currentLocationMarker.cancel()
+            manager.onDestroy()
         }
     }
 
-    val userMarker = remember {
-        Marker(mapView).apply {
-            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-            icon = userDotDrawable(context)
-            setOnMarkerClickListener(Marker.OnMarkerClickListener { _, _ -> true })
-        }
-    }
-
-    val lifecycleOwner = context as? LifecycleOwner
     DisposableEffect(lifecycleOwner, mapView) {
+        if (lifecycleOwner == null) return@DisposableEffect onDispose {}
+
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
+                Lifecycle.Event.ON_START -> mapView.onStart()
+                Lifecycle.Event.ON_STOP -> mapView.onStop()
                 Lifecycle.Event.ON_RESUME -> {
-                    mapView.onResume()
                     resumeTick++
                 }
-                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
                 else -> Unit
             }
         }
-        lifecycleOwner?.lifecycle?.addObserver(observer)
+
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            lifecycleOwner?.lifecycle?.removeObserver(observer)
-            mapView.onPause()
-            mapView.onDetach()
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            mapView.onStop()
         }
     }
 
@@ -186,294 +169,165 @@ fun MapScreen(
         servicesOn = context.isLocationServicesOn()
     }
 
-    LaunchedEffect(location) {
+    LaunchedEffect(location, currentLocationManager) {
         val fix = location ?: return@LaunchedEffect
-        val point = GeoPoint(fix.latitude, fix.longitude)
-
-        if (!mapView.overlays.contains(accuracyCircle)) {
-            mapView.overlays.add(accuracyCircle)
-            mapView.overlays.add(userMarker)
-        }
-        userMarker.position = point
-        accuracyCircle.setPoints(
-            Polygon.pointsAsCircle(point, max(fix.accuracy.toDouble(), 5.0))
-        )
-
-        if (!hasCentered) {
-            mapView.controller.setZoom(USER_ZOOM)
-            mapView.controller.setCenter(point)
-            hasCentered = true
-        } else if (followUser) {
-            mapView.controller.animateTo(point)
-        }
-        mapView.invalidate()
+        currentLocationMarker.update(Point.fromLngLat(fix.longitude, fix.latitude))
     }
 
-    val current = location
+    LaunchedEffect(location, activeJob, hasCentered) {
+        val fix = location ?: return@LaunchedEffect
+        if (!hasCentered || activeJob == null) {
+            mapView.getMapboxMap().setCamera(
+                CameraOptions.Builder()
+                    .center(Point.fromLngLat(fix.longitude, fix.latitude))
+                    .zoom(USER_ZOOM)
+                    .pitch(USER_PITCH)
+                    .build()
+            )
+            hasCentered = true
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 
-        // Top overlays: active-delivery banner (if any) above the location card
-        Column(
+        Box(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .statusBarsPadding()
+                .align(Alignment.TopEnd)
                 .padding(16.dp)
-        ) {
-            if (activeJob != null) {
-                ActiveJobBanner(job = activeJob, onClick = onResumeActiveJob)
-                if (hasPermission && servicesOn) Spacer(modifier = Modifier.height(10.dp))
-            }
-            if (hasPermission && servicesOn) {
-                LocationStatusCard(location = current)
-            }
-        }
-
-        if (hasPermission && servicesOn && current != null) {
-            RecenterButton(
-                following = followUser,
-                onClick = {
-                    followUser = true
-                    mapView.controller.setZoom(USER_ZOOM)
-                    mapView.controller.animateTo(GeoPoint(current.latitude, current.longitude))
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
-            )
-        }
-
-        if (!hasPermission) {
-            if (permanentlyDenied) {
-                LocationPromptCard(
-                    title = "Location permission needed",
-                    message = "Location is blocked for Kilivana. Open Settings, then Permissions, then Location, and allow it so we can show where you are.",
-                    buttonText = "Open settings",
-                    onClick = {
-                        context.startActivity(
-                            Intent(
-                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.fromParts("package", context.packageName, null)
-                            )
+                .clip(CircleShape)
+                .background(KilivanaWhite)
+                .clickable {
+                    val fix = location
+                    if (fix != null) {
+                        mapView.getMapboxMap().setCamera(
+                            CameraOptions.Builder()
+                                .center(Point.fromLngLat(fix.longitude, fix.latitude))
+                                .zoom(USER_ZOOM)
+                                .pitch(USER_PITCH)
+                                .build()
                         )
-                    },
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
-                )
-            } else {
-                LocationPromptCard(
-                    title = "Show where you are",
-                    message = "Kilivana uses your phone's GPS to place you on the map. Your location is only read while the app is open.",
-                    buttonText = "Allow location",
-                    onClick = {
+                    } else if (!hasPermission) {
                         permissionLauncher.launch(
                             arrayOf(
                                 Manifest.permission.ACCESS_FINE_LOCATION,
                                 Manifest.permission.ACCESS_COARSE_LOCATION
                             )
                         )
-                    },
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
-                )
-            }
-        } else if (!servicesOn) {
-            LocationPromptCard(
-                title = "Location is turned off",
-                message = "Turn on your phone's location (GPS) so we can find you on the map.",
-                buttonText = "Turn on location",
-                onClick = { context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
-            )
-        }
-
-        // Required OpenStreetMap attribution
-        Text(
-            text = "© OpenStreetMap contributors",
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 8.dp, bottom = 6.dp)
-                .background(KilivanaWhite.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
-                .padding(horizontal = 4.dp, vertical = 1.dp),
-            color = KilivanaTextMuted,
-            fontSize = 10.sp
-        )
-    }
-}
-
-@Composable
-private fun ActiveJobBanner(job: Job, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(3.dp, shape)
-            .clip(shape)
-            .background(KilivanaGreenCard)
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.LocalShipping,
-            contentDescription = null,
-            tint = KilivanaWhite,
-            modifier = Modifier.size(22.dp)
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Active delivery: ${job.id}",
-                color = KilivanaWhite,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "Tap to continue to ${job.pickupPlace}",
-                color = KilivanaWhite.copy(alpha = 0.85f),
-                fontSize = 12.sp
-            )
-        }
-        Icon(
-            imageVector = Icons.Outlined.ChevronRight,
-            contentDescription = null,
-            tint = KilivanaWhite,
-            modifier = Modifier.size(20.dp)
-        )
-    }
-}
-
-@Composable
-private fun LocationStatusCard(location: Location?) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(3.dp, shape)
-            .clip(shape)
-            .background(KilivanaWhite)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(KilivanaGreenTint),
-            contentAlignment = Alignment.Center
+                    }
+                }
+                .padding(12.dp)
         ) {
             Icon(
-                imageVector = Icons.Outlined.LocationOn,
-                contentDescription = null,
-                tint = KilivanaGreen,
-                modifier = Modifier.size(22.dp)
+                imageVector = Icons.Outlined.MyLocation,
+                contentDescription = "Center map on my location",
+                tint = KilivanaGreen
             )
         }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column {
-            Text(
-                text = "Your location",
-                color = KilivanaTextPrimary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = if (location == null) {
-                    "Finding you…"
-                } else {
-                    "%.5f, %.5f · ±%d m".format(
-                        Locale.US,
-                        location.latitude,
-                        location.longitude,
-                        location.accuracy.roundToInt()
-                    )
-                },
-                color = KilivanaTextMuted,
-                fontSize = 12.sp
-            )
-        }
-    }
-}
 
-@Composable
-private fun RecenterButton(
-    following: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .size(52.dp)
-            .shadow(4.dp, CircleShape)
-            .clip(CircleShape)
-            .background(if (following) KilivanaGreenCard else KilivanaWhite)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.MyLocation,
-            contentDescription = "Centre on my location",
-            tint = if (following) KilivanaWhite else KilivanaGreenCard,
-            modifier = Modifier.size(24.dp)
-        )
-    }
-}
-
-@Composable
-private fun LocationPromptCard(
-    title: String,
-    message: String,
-    buttonText: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val shape = RoundedCornerShape(20.dp)
-    Column(
-        modifier = modifier
-            .padding(horizontal = 16.dp)
-            .shadow(6.dp, shape)
-            .clip(shape)
-            .background(KilivanaWhite)
-            .padding(20.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
+        if (activeJob != null) {
+            Column(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(KilivanaGreenTint),
-                contentAlignment = Alignment.Center
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .shadow(6.dp, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(KilivanaWhite)
+                    .padding(20.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.LocationOn,
-                    contentDescription = null,
-                    tint = KilivanaGreen,
-                    modifier = Modifier.size(22.dp)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.LocalShipping,
+                        contentDescription = null,
+                        tint = KilivanaGreen,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = activeJob.customer,
+                            color = KilivanaTextPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = activeJob.pickupPlace,
+                            color = KilivanaTextMuted,
+                            fontSize = 12.sp
+                        )
+                    }
+                    KilivanaButton(
+                        text = "Resume",
+                        onClick = onResumeActiveJob,
+                        modifier = Modifier.width(120.dp)
+                    )
+                }
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = title,
-                modifier = Modifier.weight(1f),
-                color = KilivanaTextPrimary,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold
-            )
         }
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(text = message, color = KilivanaTextMuted, fontSize = 14.sp, lineHeight = 20.sp)
-        Spacer(modifier = Modifier.height(16.dp))
-        KilivanaButton(text = buttonText, onClick = onClick)
-    }
-}
 
-private fun userDotDrawable(context: Context): Drawable {
-    val density = context.resources.displayMetrics.density
-    val size = (26 * density).toInt()
-    return GradientDrawable().apply {
-        shape = GradientDrawable.OVAL
-        setColor(0xFF3B82F6.toInt())
-        setStroke((4 * density).toInt(), android.graphics.Color.WHITE)
-        setSize(size, size)
+        if (!hasPermission || !servicesOn) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .padding(horizontal = 30.dp)
+                    .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(20.dp))
+                    .padding(18.dp)
+            ) {
+                Text(
+                    text = "Location access required",
+                    color = KilivanaTextPrimary,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (!hasPermission) {
+                        "Allow location access so the app can show your position and route status."
+                    } else {
+                        "Turn on location services to continue."
+                    },
+                    color = KilivanaTextMuted,
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .clickable {
+                            if (!hasPermission) {
+                                permissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            } else {
+                                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                            }
+                        }
+                        .fillMaxWidth()
+                        .background(KilivanaGreenTint, RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.LocationOn,
+                        contentDescription = null,
+                        tint = KilivanaGreen
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = if (!hasPermission) "Enable permissions" else "Open location settings",
+                        color = KilivanaTextPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Icon(
+                        imageVector = Icons.Outlined.ChevronRight,
+                        contentDescription = null,
+                        tint = KilivanaTextPrimary
+                    )
+                }
+            }
+        }
     }
 }

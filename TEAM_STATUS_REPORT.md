@@ -28,7 +28,7 @@ The app has a substantial Kotlin/Jetpack Compose interface and working code path
 
 - **UI and navigation:** Splash/login/main screens and feature screens are implemented in Compose; navigation is managed by screen state in the app rather than a Navigation library.
 - **Location and map:** Location permission declarations, fused location updates, OpenStreetMap map views, markers, and recentering logic are present.
-- **Road routing:** OSRM route requests are implemented with a straight-line fallback and failure logging. The public demo endpoint is for development/light use, not production traffic.
+- **Road routing:** Mapbox Directions route requests are implemented with a straight-line fallback and failure logging.
 - **Authentication:** Login calls the backend, stores an in-memory session, attaches bearer tokens, and includes refresh-token handling. “Remember me” stores session metadata in DataStore and tokens through Android Keystore-backed encrypted preferences.
 - **Driver profile:** Backend calls are wired for loading profile/images and uploading/deleting profile images. Coil renders profile images.
 - **Local notification test:** Android notification channels and a test-notification action exist; the action respects the in-app push/sound toggles and OS permission.
@@ -44,14 +44,14 @@ These are source-level implementation findings, not confirmation from a device r
 - **Settings persistence and localization:** Notification, sound, dark-mode, and language choices reset when the app process restarts. Choosing Kiswahili does not translate the app. DataStore is currently used for remembered authentication, not these settings.
 - **Profile completeness:** Some displayed statistics remain placeholders (rating and completed-delivery count are set to zero). The driver model currently derives its `paymentMethod` display value from `availabilityStatus`, which should be verified/corrected.
 - **Support/account actions:** Password reset, contact support, bank details, help, legal/about links, and several profile actions are TODOs.
-- **Backend/service availability:** The API base URL is a hard-coded free ngrok tunnel and can change or go offline. The OSRM demo service and public OSM tile servers have availability, usage-policy, and production-scale limitations.
+- **Backend/service availability:** The API base URL is a hard-coded free ngrok tunnel and can change or go offline. The Mapbox Directions service and public OSM tile servers have availability, usage-policy, and production-scale limitations.
 - **Release readiness:** The application ID is still `com.example.kilivana_driver`; release signing is not configured in the reviewed Gradle file; minification is disabled. Debug HTTP body logging includes request headers, so bearer tokens may appear in development Logcat. Redact `Authorization` before sharing debug logs and confirm logging is absent from release builds.
 
 ## Verification and Confidence
 
 - **Automated tests:** Only the default arithmetic unit test and package-name instrumentation test are present. They do not validate login, token refresh, API parsing, GPS, routes, jobs, or notifications.
 - **Build/test result:** A Gradle unit-test run was attempted in this workspace, but the terminal did not provide a definitive final pass/fail marker. Treat build and test status as **unverified** until `./gradlew testDebugUnitTest assembleDebug` completes successfully.
-- **Runtime behavior:** No emulator/device run or live backend health-check result was captured during this review. GPS permissions, map tile loading, OSRM responses, login, profile upload, and Android notification behavior still need hands-on validation.
+- **Runtime behavior:** No emulator/device run or live backend health-check result was captured during this review. GPS permissions, map tile loading, Mapbox Directions responses, login, profile upload, and Android notification behavior still need hands-on validation.
 
 ## Recommended Team Priorities...
 

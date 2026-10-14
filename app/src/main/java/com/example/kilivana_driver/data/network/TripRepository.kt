@@ -115,7 +115,7 @@ class TripRepository(
      * here and in TripApi.
      */
     fun advanceToInTransit() {
-        if (_tripStage.value == TripStage.HEADING_TO_PICKUP) {
+        if (_tripStage.value == null || _tripStage.value == TripStage.HEADING_TO_PICKUP) {
             _tripStage.value = TripStage.IN_TRANSIT
         }
     }
