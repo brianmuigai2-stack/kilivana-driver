@@ -45,15 +45,33 @@ class JobsViewModel(
     private val _uiState = MutableStateFlow(JobsUiState(isLoading = true))
     val uiState: StateFlow<JobsUiState> = _uiState.asStateFlow()
 
+    /** Tracks the user id whose jobs are currently loaded, so a switch to a
+     * different driver clears the old list before fetching the new one. */
+    private var currentUserId: Long? = null
+
     init {
         // Created at activity launch, before the driver may have logged in,
-        // so watch the session and load once it's populated. When the user is
-        // not signed in, clear the loading state so the spinner doesn't hang
-        // forever waiting for a login that hasn't happened yet.
+        // so watch the session and load once it's populated. When the user
+        // signs out — or a different driver signs in — clear the previous
+        // driver's jobs so they don't leak across accounts.
         viewModelScope.launch {
             SessionStore.currentUser.collect { user ->
-                if (user != null) refresh()
-                else _uiState.update { it.copy(isLoading = false) }
+                if (user != null && user.id != currentUserId) {
+                    // Different driver: wipe the stale list immediately so
+                    // the old jobs are never shown to the new owner.
+                    _uiState.update {
+                        it.copy(
+                            isLoading = true,
+                            jobs = emptyList(),
+                            errorMessage = null
+                        )
+                    }
+                    currentUserId = user.id
+                    refresh()
+                } else if (user == null) {
+                    _uiState.update { it.copy(isLoading = false, jobs = emptyList()) }
+                    currentUserId = null
+                }
             }
         }
     }
