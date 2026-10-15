@@ -3,7 +3,7 @@ package com.example.kilivana_driver.data.network
 import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.LocationUpdate
 import com.example.kilivana_driver.data.model.LocationUploadResponse
-import com.example.kilivana_driver.data.model.StartTrackingRequest
+import com.example.kilivana_driver.data.model.ReportLocationRequest
 import com.example.kilivana_driver.data.model.StopTrackingRequest
 import com.example.kilivana_driver.data.model.TripStatus
 import retrofit2.http.Body
@@ -29,12 +29,12 @@ interface TripApi {
      * Call this when the driver taps "Start Trip" or "Mark as Picked Up"
      * and the trip becomes eligible for live tracking.
      *
-     * POST /api/v1/trips/{tripId}/tracking/start
+     * POST /api/v1/tracking/{tripId}/location
      */
-    @POST("api/v1/trips/{tripId}/tracking/start")
+    @POST("api/v1/tracking/{tripId}/location")
     suspend fun startTracking(
         @Path("tripId") tripId: String,
-        @Body body: StartTrackingRequest
+        @Body body: ReportLocationRequest
     ): ApiResponse<Unit>
 
     /**

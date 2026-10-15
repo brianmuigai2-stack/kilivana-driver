@@ -5,7 +5,7 @@ import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.JobStatus
 import com.example.kilivana_driver.data.model.LocationUpdate
-import com.example.kilivana_driver.data.model.StartTrackingRequest
+import com.example.kilivana_driver.data.model.ReportLocationRequest
 import com.example.kilivana_driver.data.model.StopTrackingRequest
 import com.example.kilivana_driver.data.model.TrackingConfig
 import com.example.kilivana_driver.data.model.TripStage
@@ -80,7 +80,7 @@ class TripRepository(
             return@withContext false
         }
 
-        val request = StartTrackingRequest(tripId = job.id, driverId = userId)
+        val request = ReportLocationRequest(tripId = job.id.toLongOrNull(), latitude = 0.0, longitude = 0.0)
         try {
             val response = api.startTracking(job.id, request)
             if (response.success != false) {

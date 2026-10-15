@@ -1,5 +1,8 @@
 package com.example.kilivana_driver.tracking
 
+import java.time.Instant
+import com.example.kilivana_driver.data.network.TrackingRepository
+import com.example.kilivana_driver.data.model.ReportLocationRequest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -82,6 +85,7 @@ class LocationTrackingService : Service() {
     private val scopeJob = Job()
     private val scope = CoroutineScope(Dispatchers.IO + scopeJob)
     private val locationRepository = LocationRepository()
+    private val trackingRepository = TrackingRepository()
     private val tripRepository = TripRepository(locationRepository = locationRepository)
     private val trackingConfig = TrackingConfig.DEFAULT
 
@@ -186,18 +190,21 @@ class LocationTrackingService : Service() {
             return
         }
 
-        val update = LocationUpdate(
-            tripId = tripId,
+        val jobId = tripId.toLongOrNull() ?: return
+        val speedKmh = if (location.hasSpeed()) (location.speed * 3.6) else null
+        val bearing = if (location.hasBearing()) location.bearing.toDouble() else null
+        val accuracy = if (location.hasAccuracy()) location.accuracy.toDouble() else null
+        val request = ReportLocationRequest(
+            tripId = jobId,
             latitude = location.latitude,
             longitude = location.longitude,
-            bearing = if (location.hasBearing()) location.bearing else null,
-            speed = if (location.hasSpeed()) location.speed else null,
-            accuracy = if (location.hasAccuracy()) location.accuracy else null
+            speedKmh = speedKmh,
+            bearing = bearing,
+            accuracyMetres = accuracy,
+            clientTimestamp = java.time.Instant.now().toString()
         )
-
-        // Upload via repository (handles queuing/retry)
         scope.launch {
-            locationRepository.uploadNow(update)
+            trackingRepository.reportLocation(jobId, request)
         }
     }
 

@@ -18,6 +18,8 @@ import retrofit2.http.POST
  */
 interface AuthApi {
 
+    // Retrofit annotations
+
     @POST("api/v1/auth/login")
     suspend fun login(@Body body: LoginRequest): ApiResponse<LoginResult>
 
