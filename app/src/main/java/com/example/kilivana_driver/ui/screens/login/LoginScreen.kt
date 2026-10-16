@@ -3,15 +3,14 @@ package com.example.kilivana_driver.ui.screens.login
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -20,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -43,8 +43,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -64,6 +68,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaError
 import com.example.kilivana_driver.ui.theme.KilivanaErrorTint
 import com.example.kilivana_driver.ui.theme.KilivanaGreen
 import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
+import com.example.kilivana_driver.ui.theme.KilivanaGreenDark
 import com.example.kilivana_driver.ui.theme.KilivanaGreenTint
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
@@ -95,123 +100,161 @@ fun LoginScreen(
     ) {
 
         // ---------------------------------------------------------
-        // HEADER
+        // TOP GREEN SECTION
         // ---------------------------------------------------------
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(265.dp)
-                .background(KilivanaGreen)
+                .height(300.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(KilivanaGreenDark, KilivanaGreen)
+                    )
+                )
         ) {
             KilivanaStatusBarScrim()
 
-            RoadHeaderGraphic(
-                modifier = Modifier.fillMaxSize()
-            )
+            // Subtle decorative circles
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.04f),
+                    radius = size.width * 0.55f,
+                    center = Offset(size.width * 0.85f, size.height * 0.15f)
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.04f),
+                    radius = size.width * 0.35f,
+                    center = Offset(size.width * 0.1f, size.height * 0.75f)
+                )
+                // Dotted route line
+                var x = size.width * 0.08f
+                while (x < size.width * 0.55f) {
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.12f),
+                        radius = 3f,
+                        center = Offset(x, size.height * 0.82f)
+                    )
+                    x += 18f
+                }
+            }
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(
-                        start = 24.dp,
-                        end = 24.dp,
-                        top = 48.dp,
-                        bottom = 30.dp
-                    ),
-                verticalArrangement = Arrangement.SpaceBetween
+                    .padding(start = 28.dp, end = 28.dp, top = 52.dp, bottom = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
-                Image(
-                    painter = painterResource(
-                        id = R.drawable.kilivana_logo
-                    ),
-                    contentDescription = "Kilivana logo",
+                // Circular logo badge
+                Box(
                     modifier = Modifier
-                        .width(150.dp)
-                        .height(50.dp),
-                    contentScale = ContentScale.Fit
-                )
-
-                Column {
-
-                    Text(
-                        text = "DRIVER PORTAL",
-                        color = Color.White.copy(alpha = 0.72f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
-                    )
-
-                    Spacer(
-                        modifier = Modifier.height(8.dp)
-                    )
-
-                    Text(
-                        text = "Your route starts here.",
-                        color = Color.White,
-                        fontSize = 30.sp,
-                        lineHeight = 35.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(
-                        modifier = Modifier.height(7.dp)
-                    )
-
-                    Text(
-                        text = "Access your trips, deliveries and dispatches.",
-                        color = Color.White.copy(alpha = 0.78f),
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
+                        .shadow(10.dp, CircleShape)
+                        .size(78.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .border(2.dp, Color.White.copy(alpha = 0.4f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.kilivana_logo),
+                        contentDescription = "Kilivana logo",
+                        modifier = Modifier.size(56.dp),
+                        contentScale = ContentScale.Fit
                     )
                 }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "DRIVER PORTAL",
+                    color = Color.White.copy(alpha = 0.70f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Your route starts here.",
+                    color = Color.White,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "Access your trips, deliveries and dispatches.",
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
+                )
             }
         }
 
         // ---------------------------------------------------------
-        // LOGIN CONTENT
+        // WAVE DIVIDER
         // ---------------------------------------------------------
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(36.dp)
+                .background(KilivanaWhite)
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val path = Path().apply {
+                    moveTo(0f, size.height)
+                    cubicTo(
+                        size.width * 0.25f, 0f,
+                        size.width * 0.75f, size.height,
+                        size.width, 0f
+                    )
+                    lineTo(size.width, size.height)
+                    lineTo(0f, size.height)
+                    close()
+                }
+                // Green fill behind the wave (top part)
+                drawRect(
+                    color = KilivanaGreen,
+                    topLeft = Offset(0f, 0f),
+                    size = androidx.compose.ui.geometry.Size(size.width, size.height)
+                )
+                // White wave on top
+                drawPath(path = path, color = KilivanaWhite)
+            }
+        }
 
+        // ---------------------------------------------------------
+        // FORM SECTION
+        // ---------------------------------------------------------
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(
-                    start = 24.dp,
-                    end = 24.dp,
-                    top = 28.dp,
-                    bottom = 32.dp
-                )
+                .background(KilivanaWhite)
+                .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
         ) {
 
             Text(
                 text = "Sign in",
                 color = KilivanaTextPrimary,
-                fontSize = 24.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
 
-            Spacer(
-                modifier = Modifier.height(6.dp)
-            )
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = "Use your assigned driver account.",
                 color = KilivanaTextMuted,
-                fontSize = 14.sp
+                fontSize = 13.sp
             )
 
-            Spacer(
-                modifier = Modifier.height(25.dp)
-            )
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // -----------------------------------------------------
             // EMAIL
-            // -----------------------------------------------------
-
-            LoginFieldLabel(
-                text = "Email address"
-            )
+            LoginFieldLabel(text = "Email address")
 
             KilivanaTextField(
                 value = uiState.email,
@@ -226,24 +269,15 @@ fun LoginScreen(
                 ),
                 keyboardActions = KeyboardActions(
                     onNext = {
-                        focusManager.moveFocus(
-                            androidx.compose.ui.focus.FocusDirection.Down
-                        )
+                        focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
                     }
                 )
             )
 
-            Spacer(
-                modifier = Modifier.height(18.dp)
-            )
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // -----------------------------------------------------
             // PASSWORD
-            // -----------------------------------------------------
-
-            LoginFieldLabel(
-                text = "Password"
-            )
+            LoginFieldLabel(text = "Password")
 
             KilivanaTextField(
                 value = uiState.password,
@@ -252,30 +286,15 @@ fun LoginScreen(
                 leadingIcon = Icons.Outlined.Lock,
                 enabled = !uiState.isLoading,
                 isError = hasError,
-                visualTransformation =
-                    if (uiState.passwordVisible) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
+                visualTransformation = if (uiState.passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingContent = {
                     IconButton(
                         onClick = onTogglePasswordVisibility,
                         enabled = !uiState.isLoading
                     ) {
                         Icon(
-                            imageVector =
-                                if (uiState.passwordVisible) {
-                                    Icons.Outlined.Visibility
-                                } else {
-                                    Icons.Outlined.VisibilityOff
-                                },
-                            contentDescription =
-                                if (uiState.passwordVisible) {
-                                    "Hide password"
-                                } else {
-                                    "Show password"
-                                },
+                            imageVector = if (uiState.passwordVisible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                            contentDescription = if (uiState.passwordVisible) "Hide password" else "Show password",
                             tint = KilivanaTextMuted
                         )
                     }
@@ -292,49 +311,30 @@ fun LoginScreen(
                 )
             )
 
-            // -----------------------------------------------------
             // REMEMBER ME / FORGOT PASSWORD
-            // -----------------------------------------------------
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-
                 Row(
                     modifier = Modifier
-                        .clip(
-                            RoundedCornerShape(8.dp)
-                        )
-                        .clickable(
-                            enabled = !uiState.isLoading
-                        ) {
-                            onRememberMeChange(
-                                !uiState.rememberMe
-                            )
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = !uiState.isLoading) {
+                            onRememberMeChange(!uiState.rememberMe)
                         },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-
                     Checkbox(
                         checked = uiState.rememberMe,
-                        onCheckedChange = { checked ->
-
-                            if (!uiState.isLoading) {
-                                onRememberMeChange(
-                                    checked
-                                )
-                            }
-                        },
+                        onCheckedChange = { if (!uiState.isLoading) onRememberMeChange(it) },
                         colors = CheckboxDefaults.colors(
                             checkedColor = KilivanaGreen,
                             uncheckedColor = KilivanaTextMuted,
                             checkmarkColor = KilivanaWhite
                         )
                     )
-
                     Text(
                         text = "Keep me signed in",
                         color = KilivanaTextPrimary,
@@ -342,18 +342,13 @@ fun LoginScreen(
                     )
                 }
 
-                Spacer(
-                    modifier = Modifier.weight(1f)
-                )
+                Spacer(modifier = Modifier.weight(1f))
 
                 TextButton(
                     onClick = onForgotPassword,
                     enabled = !uiState.isLoading,
-                    contentPadding = PaddingValues(
-                        horizontal = 2.dp
-                    )
+                    contentPadding = PaddingValues(horizontal = 2.dp)
                 ) {
-
                     Text(
                         text = "Forgot password?",
                         color = KilivanaGreen,
@@ -363,29 +358,15 @@ fun LoginScreen(
                 }
             }
 
-            // -----------------------------------------------------
             // ERROR
-            // -----------------------------------------------------
-
             uiState.errorMessage?.let { message ->
-
-                Spacer(
-                    modifier = Modifier.height(10.dp)
-                )
-
-                LoginErrorBanner(
-                    message = message
-                )
+                Spacer(modifier = Modifier.height(10.dp))
+                LoginErrorBanner(message = message)
             }
 
-            Spacer(
-                modifier = Modifier.height(22.dp)
-            )
+            Spacer(modifier = Modifier.height(22.dp))
 
-            // -----------------------------------------------------
             // SIGN IN BUTTON
-            // -----------------------------------------------------
-
             Button(
                 onClick = {
                     focusManager.clearFocus()
@@ -399,26 +380,18 @@ fun LoginScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = KilivanaGreen,
                     contentColor = Color.White,
-                    disabledContainerColor =
-                        KilivanaGreen.copy(alpha = 0.55f),
-                    disabledContentColor =
-                        Color.White.copy(alpha = 0.85f)
+                    disabledContainerColor = KilivanaGreen.copy(alpha = 0.55f),
+                    disabledContentColor = Color.White.copy(alpha = 0.85f)
                 ),
-                contentPadding = PaddingValues(
-                    horizontal = 20.dp
-                )
+                contentPadding = PaddingValues(horizontal = 20.dp)
             ) {
-
                 if (uiState.isLoading) {
-
                     CircularProgressIndicator(
                         modifier = Modifier.size(22.dp),
                         color = Color.White,
                         strokeWidth = 2.dp
                     )
-
                 } else {
-
                     Text(
                         text = "Sign in",
                         fontSize = 16.sp,
@@ -427,27 +400,17 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(
-                modifier = Modifier.height(24.dp)
-            )
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // -----------------------------------------------------
             // ADMIN SUPPORT
-            // -----------------------------------------------------
-
             AdminSupportRow(
                 enabled = !uiState.isLoading,
                 onClick = onContactSupport
             )
 
-            Spacer(
-                modifier = Modifier.height(24.dp)
-            )
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // -----------------------------------------------------
             // FOOTER
-            // -----------------------------------------------------
-
             Text(
                 text = "KILIVANA DRIVER",
                 modifier = Modifier.fillMaxWidth(),
@@ -462,108 +425,18 @@ fun LoginScreen(
 }
 
 // ================================================================
-// ROAD HEADER GRAPHIC
-// ================================================================
-
-@Composable
-private fun RoadHeaderGraphic(
-    modifier: Modifier = Modifier
-) {
-    Canvas(
-        modifier = modifier
-    ) {
-
-        val width = size.width
-        val height = size.height
-
-        val roadStartX = width * 0.74f
-        val roadBottomX = width * 0.98f
-
-        // Main road
-
-        drawLine(
-            color = Color.White.copy(alpha = 0.07f),
-            start = Offset(
-                roadStartX,
-                height * 0.05f
-            ),
-            end = Offset(
-                roadBottomX,
-                height * 0.92f
-            ),
-            strokeWidth = 70f
-        )
-
-        // Road lane markings
-
-        var y = height * 0.15f
-
-        while (y < height) {
-
-            drawLine(
-                color = Color.White.copy(alpha = 0.22f),
-                start = Offset(
-                    width * 0.76f,
-                    y
-                ),
-                end = Offset(
-                    width * 0.78f,
-                    y + 24f
-                ),
-                strokeWidth = 4f
-            )
-
-            y += 42f
-        }
-
-        // Decorative route lines
-
-        drawLine(
-            color = Color.White.copy(alpha = 0.08f),
-            start = Offset(
-                width * 0.48f,
-                height * 0.24f
-            ),
-            end = Offset(
-                width * 0.68f,
-                height * 0.24f
-            ),
-            strokeWidth = 2f
-        )
-
-        drawLine(
-            color = Color.White.copy(alpha = 0.06f),
-            start = Offset(
-                width * 0.53f,
-                height * 0.30f
-            ),
-            end = Offset(
-                width * 0.66f,
-                height * 0.30f
-            ),
-            strokeWidth = 2f
-        )
-    }
-}
-
-// ================================================================
 // FIELD LABEL
 // ================================================================
 
 @Composable
-private fun LoginFieldLabel(
-    text: String
-) {
+private fun LoginFieldLabel(text: String) {
     Text(
         text = text,
         color = KilivanaTextPrimary,
         fontSize = 14.sp,
         fontWeight = FontWeight.SemiBold
     )
-
-    Spacer(
-        modifier = Modifier.height(8.dp)
-    )
+    Spacer(modifier = Modifier.height(8.dp))
 }
 
 // ================================================================
@@ -578,31 +451,19 @@ private fun AdminSupportRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(
-                RoundedCornerShape(12.dp)
-            )
+            .clip(RoundedCornerShape(12.dp))
             .background(KilivanaGreenTint)
-            .clickable(
-                enabled = enabled,
-                onClick = onClick
-            )
-            .padding(
-                horizontal = 15.dp,
-                vertical = 13.dp
-            ),
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 15.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-
         Box(
             modifier = Modifier
                 .size(38.dp)
-                .clip(
-                    RoundedCornerShape(9.dp)
-                )
+                .clip(RoundedCornerShape(9.dp))
                 .background(KilivanaWhite),
             contentAlignment = Alignment.Center
         ) {
-
             Icon(
                 imageVector = Icons.Outlined.Phone,
                 contentDescription = null,
@@ -611,25 +472,16 @@ private fun AdminSupportRow(
             )
         }
 
-        Spacer(
-            modifier = Modifier.width(12.dp)
-        )
+        Spacer(modifier = Modifier.width(12.dp))
 
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
-
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "Need assistance?",
                 color = KilivanaTextPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold
             )
-
-            Spacer(
-                modifier = Modifier.height(2.dp)
-            )
-
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = "Contact your administrator",
                 color = KilivanaTextMuted,
@@ -651,34 +503,22 @@ private fun AdminSupportRow(
 // ================================================================
 
 @Composable
-private fun LoginErrorBanner(
-    message: String
-) {
+private fun LoginErrorBanner(message: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(
-                RoundedCornerShape(10.dp)
-            )
+            .clip(RoundedCornerShape(10.dp))
             .background(KilivanaErrorTint)
-            .padding(
-                horizontal = 12.dp,
-                vertical = 11.dp
-            ),
+            .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-
         Icon(
             imageVector = Icons.Outlined.Warning,
             contentDescription = null,
             tint = KilivanaError,
             modifier = Modifier.size(20.dp)
         )
-
-        Spacer(
-            modifier = Modifier.width(10.dp)
-        )
-
+        Spacer(modifier = Modifier.width(10.dp))
         Text(
             text = message,
             color = KilivanaError,
@@ -692,15 +532,10 @@ private fun LoginErrorBanner(
 // PREVIEW
 // ================================================================
 
-@Preview(
-    showSystemUi = true,
-    showBackground = true
-)
+@Preview(showSystemUi = true, showBackground = true)
 @Composable
 private fun LoginScreenPreview() {
-
     KilivanaTheme {
-
         LoginScreen(
             uiState = LoginUiState(),
             onEmailChange = {},
