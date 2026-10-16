@@ -18,7 +18,8 @@ enum class ActivityType { PICKED_UP, DELIVERED }
 data class ActivityItem(
     val title: String,
     val subtitle: String,
-    val type: ActivityType
+    val type: ActivityType,
+    val timestamp: String = ""
 )
 
 data class DashboardUiState(
@@ -87,7 +88,8 @@ class DashboardViewModel(
             ActivityItem(
                 title = "Delivered • Order ${job.id}",
                 subtitle = address,
-                type = ActivityType.DELIVERED
+                type = ActivityType.DELIVERED,
+                timestamp = "Today"
             )
         }
     }
@@ -138,13 +140,15 @@ internal fun sampleDashboardState() = DashboardUiState(
     recentActivity = listOf(
         ActivityItem(
             title = "Picked up • Order AG-4587",
-            subtitle = "09:15 AM • Thika Kiambu",
-            type = ActivityType.PICKED_UP
+            subtitle = "Thika Kiambu",
+            type = ActivityType.PICKED_UP,
+            timestamp = "09:15 AM"
         ),
         ActivityItem(
             title = "Delivered • Order AG-4581",
-            subtitle = "Yesterday • Nairobi",
-            type = ActivityType.DELIVERED
+            subtitle = "Nairobi CBD",
+            type = ActivityType.DELIVERED,
+            timestamp = "Yesterday"
         )
     )
 )

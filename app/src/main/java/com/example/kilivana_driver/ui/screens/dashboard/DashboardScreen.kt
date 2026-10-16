@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.LocalShipping
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Work
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -108,7 +109,7 @@ fun DashboardScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(KilivanaBackground)
+            .background(KilivanaWhite)
             .verticalScroll(rememberScrollState())
     ) {
         // Full-bleed green header (paints behind the status bar, like Profile)
@@ -139,13 +140,13 @@ fun DashboardScreen(
             // 2x2 grid: each Row is weighted so both cards share the
             // width equally regardless of label length.
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionCard("My Jobs", Icons.Outlined.Work, onMyJobsClick, Modifier.weight(1f))
-                QuickActionCard("Map Route", Icons.Outlined.Map, onMapRouteClick, Modifier.weight(1f))
+                QuickActionCard("My Jobs", "View & accept jobs", Icons.Outlined.Work, onMyJobsClick, Modifier.weight(1f))
+                QuickActionCard("Map Route", "Navigate your route", Icons.Outlined.Map, onMapRouteClick, Modifier.weight(1f))
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionCard("History", Icons.Outlined.History, onHistoryClick, Modifier.weight(1f))
-                QuickActionCard("Profile", Icons.Outlined.Person, onProfileClick, Modifier.weight(1f))
+                QuickActionCard("History", "Past deliveries", Icons.Outlined.History, onHistoryClick, Modifier.weight(1f))
+                QuickActionCard("Profile", "Your account", Icons.Outlined.Person, onProfileClick, Modifier.weight(1f))
             }
 
             SectionTitle(text = "Recent Activity", topSpace = 24.dp)
@@ -237,7 +238,7 @@ private fun DashboardHeader(
             LaunchedEffect(photoUrl) { imageError.value = false }
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(64.dp)
                     .clip(CircleShape)
                     .background(KilivanaWhite.copy(alpha = 0.18f))
                     .border(2.dp, KilivanaWhite.copy(alpha = 0.7f), CircleShape),
@@ -247,32 +248,26 @@ private fun DashboardHeader(
                     AsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(photoUrl)
-                            // No disk cache: a freshly uploaded photo must
-                            // replace the old one here immediately, even
-                            // though the URL is the same.
                             .diskCachePolicy(CachePolicy.DISABLED)
                             .build(),
                         contentDescription = "Driver photo",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
-                        // A transparent error painter keeps the box empty
-                        // so the initials branch below can take over.
                         error = ColorPainter(Color.Transparent),
                         onError = { imageError.value = true }
                     )
                 }
                 if (photoUrl.isBlank() || imageError.value) {
-                    // Fallback: first letter of the driver's name.
                     Text(
                         text = uiState.driverName.take(1).uppercase(),
                         color = KilivanaWhite,
-                        fontSize = 22.sp,
+                        fontSize = 26.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -280,7 +275,7 @@ private fun DashboardHeader(
                     color = KilivanaWhite.copy(alpha = 0.85f),
                     fontSize = 14.sp
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = uiState.driverName,
                     color = KilivanaWhite,
@@ -380,9 +375,9 @@ private fun ScheduleCard(
             Text(
                 text = "TODAY'S SCHEDULE",
                 color = KilivanaGreen,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.8.sp
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
@@ -401,22 +396,30 @@ private fun ScheduleCard(
             }
         }
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(16.dp))
 
-        // Decorative delivery-truck icon on the right.
+        // Delivery count badge
         Box(
             modifier = Modifier
-                .size(56.dp)
+                .size(64.dp)
                 .clip(CircleShape)
-                .background(KilivanaGreenTint),
+                .background(KilivanaGreen),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Outlined.LocalShipping,
-                contentDescription = null,
-                tint = KilivanaGreen,
-                modifier = Modifier.size(28.dp)
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "$deliveries",
+                    color = KilivanaWhite,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (deliveries == 1) "job" else "jobs",
+                    color = KilivanaWhite.copy(alpha = 0.80f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }
@@ -444,6 +447,7 @@ private fun SectionTitle(
 @Composable
 private fun QuickActionCard(
     label: String,
+    description: String,
     icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -451,24 +455,36 @@ private fun QuickActionCard(
     val shape = RoundedCornerShape(16.dp)
     Column(
         modifier = modifier
-            .shadow(1.dp, shape)
+            .shadow(4.dp, shape)
             .clip(shape)
             .background(KilivanaWhite)
             .clickable(onClick = onClick)
             .padding(16.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(KilivanaGreenTint),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(KilivanaGreenTint),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = KilivanaGreen,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
             Icon(
-                imageVector = icon,
+                imageVector = Icons.Outlined.ChevronRight,
                 contentDescription = null,
-                tint = KilivanaGreen,
-                modifier = Modifier.size(22.dp)
+                tint = KilivanaTextMuted,
+                modifier = Modifier.size(18.dp)
             )
         }
         Spacer(modifier = Modifier.height(14.dp))
@@ -477,6 +493,12 @@ private fun QuickActionCard(
             color = KilivanaTextPrimary,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = description,
+            color = KilivanaTextMuted,
+            fontSize = 12.sp
         )
     }
 }
@@ -509,7 +531,7 @@ private fun ActivityRow(item: ActivityItem) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(1.dp, shape)
+            .shadow(4.dp, shape)
             .clip(shape)
             .background(KilivanaWhite)
             .padding(14.dp),
@@ -530,7 +552,7 @@ private fun ActivityRow(item: ActivityItem) {
             )
         }
         Spacer(modifier = Modifier.width(12.dp))
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = item.title,
                 color = KilivanaTextPrimary,
@@ -544,6 +566,11 @@ private fun ActivityRow(item: ActivityItem) {
                 fontSize = 13.sp
             )
         }
+        Text(
+            text = item.timestamp,
+            color = KilivanaTextMuted,
+            fontSize = 11.sp
+        )
     }
 }
 
