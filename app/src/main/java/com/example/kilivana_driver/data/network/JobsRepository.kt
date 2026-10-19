@@ -101,6 +101,39 @@ class JobsRepository(
             runCatchingBody { api.getTrackingHistory(jobId) }
         }
 
+    /**
+     * Accepts an ASSIGNED job on behalf of the driver.
+     *
+     * POST /api/v1/logistics/jobs/{id}/accept?driverId={driverId}
+     * Returns 400 if the job is not in ASSIGNED status or the driver is not
+     * the one assigned to it.
+     */
+    suspend fun acceptJob(jobId: Long, driverId: Long): Result<DeliveryJob> =
+        withContext(ioDispatcher) {
+            runCatchingBody { api.acceptJob(jobId, driverId) }
+        }
+
+    /**
+     * Advances a job to the given status (e.g. "picked_up", "delivered").
+     *
+     * PUT /api/v1/logistics/jobs/{id}/status?status={status}
+     * Returns 400 for illegal transitions.
+     */
+    suspend fun updateJobStatus(jobId: Long, status: String): Result<DeliveryJob> =
+        withContext(ioDispatcher) {
+            runCatchingBody { api.updateJobStatus(jobId, status) }
+        }
+
+    /**
+     * Cancels a job with a reason (driver declined or cancelled mid-trip).
+     *
+     * PUT /api/v1/logistics/jobs/{id}/cancel  body: plain string reason
+     */
+    suspend fun cancelJob(jobId: Long, reason: String): Result<DeliveryJob> =
+        withContext(ioDispatcher) {
+            runCatchingBody { api.cancelJob(jobId, reason) }
+        }
+
     /** Unwraps a response with data into a Result, classifying rejected responses and request exceptions as failures. */
     private suspend fun <T> runCatchingBody(
         block: suspend () -> ApiResponse<T>

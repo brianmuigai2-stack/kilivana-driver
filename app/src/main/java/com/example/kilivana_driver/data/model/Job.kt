@@ -9,7 +9,8 @@ package com.example.kilivana_driver.data.model
 enum class JobStatus(val label: String) {
     AVAILABLE("Available"),
     ACCEPTED("Accepted"),
-    COMPLETED("Completed")
+    COMPLETED("Completed"),
+    CANCELLED("Cancelled")
 }
 
 /**

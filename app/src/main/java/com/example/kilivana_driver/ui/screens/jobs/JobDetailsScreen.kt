@@ -239,7 +239,7 @@ fun JobDetailsScreen(
         }
 
         // Bottom actions
-        if (job.status != JobStatus.COMPLETED) {
+        if (job.status != JobStatus.COMPLETED && job.status != JobStatus.CANCELLED) {
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -270,6 +270,7 @@ fun JobDetailsScreen(
                         KilivanaButton(text = "Start Trip", onClick = onStartTrip)
                     }
                     JobStatus.COMPLETED -> Unit
+                    JobStatus.CANCELLED -> Unit
                 }
             }
         }

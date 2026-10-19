@@ -52,6 +52,7 @@ fun MainScreen(
     notificationsState: NotificationsUiState,
     onJobStatusSelected: (JobStatus) -> Unit,
     onAcceptJob: (String) -> Unit,
+    onDeclineJob: (String) -> Unit,
     onCompleteJob: (String) -> Unit,
     onRefreshJobs: () -> Unit,
     onPushNotificationsChange: (Boolean) -> Unit,
@@ -199,7 +200,7 @@ fun MainScreen(
                 selectedJobId = null
             },
             onDecline = {
-                // TODO: tell the API the driver declined this job
+                onDeclineJob(selectedJob.id)
                 selectedJobId = null
             },
             onStartTrip = {

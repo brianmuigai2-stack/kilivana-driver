@@ -4,6 +4,7 @@ import com.example.kilivana_driver.data.model.ApiError
 import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.LocationUpdate
 import com.example.kilivana_driver.data.model.LocationUploadResponse
+import com.example.kilivana_driver.data.model.ReportLocationRequest
 import com.example.kilivana_driver.data.model.TrackingConfig
 import com.example.kilivana_driver.data.model.UploadResult
 import kotlinx.coroutines.CoroutineDispatcher
@@ -34,7 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * decide *when* to track — that's the TripViewModel/Service's job.
  */
 class LocationRepository(
-    private val api: TripApi = ApiClient.create(),
+    private val api: TrackingApi = ApiClient.create(),
     private val config: TrackingConfig = TrackingConfig.DEFAULT,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
@@ -87,8 +88,13 @@ class LocationRepository(
      */
     suspend fun uploadNow(update: LocationUpdate): UploadResult =
         withContext(ioDispatcher) {
+            val jobId = update.tripId.toLongOrNull() ?: return@withContext UploadResult.Failure(
+                Exception("Invalid trip ID: ${update.tripId}"),
+                false
+            )
+            val request = update.toReportRequest()
             try {
-                val response = api.uploadLocation(update.tripId, update)
+                val response = api.reportLocation(jobId, request)
                 if (response.success != false && response.data != null) {
                     UploadResult.Success(response.data!!)
                 } else {
@@ -187,3 +193,18 @@ class LocationRepository(
         return listOfNotNull(code, details).joinToString(": ").ifBlank { fallback }
     }
 }
+
+/**
+ * Converts the internal [LocationUpdate] model into the request body expected by
+ * the backend's tracking endpoints (POST /api/v1/tracking/{jobId}/location).
+ */
+private fun LocationUpdate.toReportRequest(): ReportLocationRequest =
+    ReportLocationRequest(
+        tripId = tripId.toLongOrNull(),
+        latitude = latitude,
+        longitude = longitude,
+        speedKmh = speed?.let { it.toDouble() * 3.6 },
+        bearing = bearing?.toDouble(),
+        accuracyMetres = accuracy?.toDouble(),
+        clientTimestamp = java.time.Instant.now().toString()
+    )

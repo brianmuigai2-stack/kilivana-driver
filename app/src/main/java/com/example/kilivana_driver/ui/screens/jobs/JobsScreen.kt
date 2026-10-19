@@ -380,6 +380,7 @@ internal fun StatusBadge(job: Job) {
             if (job.isNew) Triple("NEW", KilivanaAmber, KilivanaAmberTint) else null
         JobStatus.ACCEPTED -> Triple("ACCEPTED", KilivanaBlue, KilivanaBlueTint)
         JobStatus.COMPLETED -> Triple("COMPLETED", KilivanaGreen, KilivanaGreenTint)
+        JobStatus.CANCELLED -> Triple("CANCELLED", KilivanaNotificationRed, KilivanaNotificationRed.copy(alpha = 0.12f))
     }
     if (badge == null) return
 
@@ -409,6 +410,8 @@ private fun EmptyState(status: JobStatus) {
             "No accepted jobs yet" to "Jobs you accept will show up here."
         JobStatus.COMPLETED ->
             "No completed jobs yet" to "Your finished deliveries will appear here."
+        JobStatus.CANCELLED ->
+            "No cancelled jobs" to "Jobs you decline or cancel will appear here."
     }
 
     Column(

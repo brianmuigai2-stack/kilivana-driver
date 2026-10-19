@@ -62,8 +62,10 @@ data class DeliveryJob(
      * Maps the backend job to the UI/domain [Job] model.
      *
      * Backend statuses are mapped to the three tab statuses the UI supports:
-     * - pending_assignment / assigned / accepted → AVAILABLE / ACCEPTED
+     * - pending_assignment / assigned → AVAILABLE (driver must accept or decline)
+     * - accepted / picked_up / in_transit → ACCEPTED
      * - completed / delivered → COMPLETED
+     * - cancelled / rejected → CANCELLED
      * - anything else → AVAILABLE (safe default; the UI filters by tab)
      *
      * Nullable fields from the backend are coalesced to blank strings here
@@ -94,10 +96,11 @@ data class DeliveryJob(
 
     /** Maps backend statuses to job tabs, defaulting unknown or absent statuses to available. */
     private fun mapStatus(backendStatus: String?): JobStatus = when (backendStatus?.lowercase()) {
-        "pending_assignment", "available", "unassigned" -> JobStatus.AVAILABLE
-        "assigned", "accepted", "picked_up", "in_transit", "in_progress",
+        "pending_assignment", "available", "unassigned", "assigned" -> JobStatus.AVAILABLE
+        "accepted", "picked_up", "in_transit", "in_progress",
         "en_route_to_buyer", "en_route_to_dropoff" -> JobStatus.ACCEPTED
         "completed", "delivered" -> JobStatus.COMPLETED
+        "cancelled", "rejected", "canceled" -> JobStatus.CANCELLED
         else -> JobStatus.AVAILABLE
     }
 

@@ -3,7 +3,10 @@ package com.example.kilivana_driver.data.network
 import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.DeliveryJob
 import com.example.kilivana_driver.data.model.TrackingHistoryPoint
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -60,4 +63,25 @@ interface JobsApi {
     suspend fun getTrackingHistory(
         @Path("jobId") jobId: Long
     ): ApiResponse<List<TrackingHistoryPoint>>
+
+    /** POST /api/v1/logistics/jobs/{id}/accept — ASSIGNED → ACCEPTED */
+    @POST("api/v1/logistics/jobs/{id}/accept")
+    suspend fun acceptJob(
+        @Path("id") id: Long,
+        @Query("driverId") driverId: Long
+    ): ApiResponse<DeliveryJob>
+
+    /** PUT /api/v1/logistics/jobs/{id}/status — advance job through the pipeline */
+    @PUT("api/v1/logistics/jobs/{id}/status")
+    suspend fun updateJobStatus(
+        @Path("id") id: Long,
+        @Query("status") status: String
+    ): ApiResponse<DeliveryJob>
+
+    /** PUT /api/v1/logistics/jobs/{id}/cancel — cancel with a plain-string reason body */
+    @PUT("api/v1/logistics/jobs/{id}/cancel")
+    suspend fun cancelJob(
+        @Path("id") id: Long,
+        @Body reason: String
+    ): ApiResponse<DeliveryJob>
 }

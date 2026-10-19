@@ -24,17 +24,16 @@ import retrofit2.http.Path
 interface TripApi {
 
     /**
-     * Starts tracking for a trip.
+     * Starts tracking for a trip: ASSIGNED → ACCEPTED on the backend.
      *
-     * Call this when the driver taps "Start Trip" or "Mark as Picked Up"
-     * and the trip becomes eligible for live tracking.
+     * Must be called before sending location updates. The backend rejects
+     * POST /api/v1/tracking/{jobId}/location with 400 until this succeeds.
      *
-     * POST /api/v1/tracking/{tripId}/location
+     * POST /api/v1/trips/{tripId}/tracking/start
      */
-    @POST("api/v1/tracking/{tripId}/location")
+    @POST("api/v1/trips/{tripId}/tracking/start")
     suspend fun startTracking(
-        @Path("tripId") tripId: String,
-        @Body body: ReportLocationRequest
+        @Path("tripId") tripId: String
     ): ApiResponse<Unit>
 
     /**

@@ -31,10 +31,23 @@ interface TrackingApi {
 
     /**
      * Report a driver's location.
+     *
+     * POST /api/v1/tracking/{jobId}/location
      */
     @POST("api/v1/tracking/{jobId}/location")
     suspend fun reportLocation(
         @Path("jobId") jobId: Long,
         @Body body: ReportLocationRequest
+    ): ApiResponse<ReportLocationResponseData>
+
+    /**
+     * Report a batch of driver locations (offline queue flush).
+     *
+     * POST /api/v1/tracking/{jobId}/location/batch
+     */
+    @POST("api/v1/tracking/{jobId}/location/batch")
+    suspend fun reportLocationBatch(
+        @Path("jobId") jobId: Long,
+        @Body body: List<ReportLocationRequest>
     ): ApiResponse<ReportLocationResponseData>
 }

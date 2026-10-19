@@ -129,6 +129,7 @@ class MainActivity : ComponentActivity() {
                         notificationsState = notificationsState,
                          onJobStatusSelected = jobsViewModel::onStatusSelected,
                          onAcceptJob = jobsViewModel::acceptJob,
+                         onDeclineJob = jobsViewModel::declineJob,
                          onCompleteJob = jobsViewModel::completeJob,
                          onRefreshJobs = jobsViewModel::refresh,
                         onPushNotificationsChange = settingsViewModel::onPushNotificationsChange,

@@ -123,26 +123,79 @@ class JobsViewModel(
     }
 
     fun acceptJob(jobId: String) {
-        // TODO: call the API to accept the job, then update on success
-        _uiState.update { state ->
-            state.copy(
-                jobs = state.jobs.map { job ->
-                    if (job.id == jobId) job.copy(status = JobStatus.ACCEPTED, isNew = false) else job
-                },
-                selectedStatus = JobStatus.ACCEPTED
-            )
+        val driverId = SessionStore.userId ?: return
+        val numericId = jobId.toLongOrNull() ?: run {
+            // Sample/non-numeric ID: fall back to local-only update
+            _uiState.update { state ->
+                state.copy(
+                    jobs = state.jobs.map { job ->
+                        if (job.id == jobId) job.copy(status = JobStatus.ACCEPTED, isNew = false) else job
+                    },
+                    selectedStatus = JobStatus.ACCEPTED
+                )
+            }
+            return
+        }
+        viewModelScope.launch {
+            val result = jobsRepository.acceptJob(numericId, driverId)
+            if (result.isSuccess) {
+                val updated = result.getOrNull()!!.toDomain()
+                _uiState.update { state ->
+                    state.copy(
+                        jobs = state.jobs.map { if (it.id == jobId) updated else it },
+                        selectedStatus = JobStatus.ACCEPTED
+                    )
+                }
+            } else {
+                _uiState.update {
+                    it.copy(errorMessage = result.exceptionOrNull()?.message)
+                }
+            }
+        }
+    }
+
+    fun declineJob(jobId: String, reason: String = "Driver declined") {
+        val numericId = jobId.toLongOrNull() ?: run {
+            _uiState.update { state ->
+                state.copy(jobs = state.jobs.filter { it.id != jobId })
+            }
+            return
+        }
+        viewModelScope.launch {
+            val result = jobsRepository.cancelJob(numericId, reason)
+            if (result.isSuccess) {
+                _uiState.update { state ->
+                    state.copy(jobs = state.jobs.filter { it.id != jobId })
+                }
+            } else {
+                _uiState.update { it.copy(errorMessage = result.exceptionOrNull()?.message) }
+            }
         }
     }
 
     fun completeJob(jobId: String) {
-        // TODO: call the API to confirm delivery, then update on success
-        _uiState.update { state ->
-            state.copy(
-                jobs = state.jobs.map { job ->
-                    if (job.id == jobId) job.copy(status = JobStatus.COMPLETED) else job
-                },
-                selectedStatus = JobStatus.COMPLETED
-            )
+        val numericId = jobId.toLongOrNull() ?: run {
+            _uiState.update { state ->
+                state.copy(
+                    jobs = state.jobs.map { if (it.id == jobId) it.copy(status = JobStatus.COMPLETED) else it },
+                    selectedStatus = JobStatus.COMPLETED
+                )
+            }
+            return
+        }
+        viewModelScope.launch {
+            val result = jobsRepository.updateJobStatus(numericId, "delivered")
+            if (result.isSuccess) {
+                val updated = result.getOrNull()!!.toDomain()
+                _uiState.update { state ->
+                    state.copy(
+                        jobs = state.jobs.map { if (it.id == jobId) updated else it },
+                        selectedStatus = JobStatus.COMPLETED
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(errorMessage = result.exceptionOrNull()?.message) }
+            }
         }
     }
 }
