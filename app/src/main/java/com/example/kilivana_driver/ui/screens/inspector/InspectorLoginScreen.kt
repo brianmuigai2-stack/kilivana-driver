@@ -62,8 +62,8 @@ import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.R
 import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
 import com.example.kilivana_driver.ui.components.KilivanaTextField
-import com.example.kilivana_driver.ui.theme.KilivanaBlue
-import com.example.kilivana_driver.ui.theme.KilivanaBlueDark
+import com.example.kilivana_driver.ui.theme.KilivanaGreen
+import com.example.kilivana_driver.ui.theme.KilivanaGreenDark
 import com.example.kilivana_driver.ui.theme.KilivanaError
 import com.example.kilivana_driver.ui.theme.KilivanaErrorTint
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
@@ -102,7 +102,7 @@ fun InspectorLoginScreen(
                 .height(300.dp)
                 .background(
                     Brush.verticalGradient(
-                        listOf(KilivanaBlueDark, KilivanaBlue)
+                        listOf(KilivanaGreenDark, KilivanaGreen)
                     )
                 )
         ) {
@@ -207,7 +207,7 @@ fun InspectorLoginScreen(
                     close()
                 }
                 drawRect(
-                    color = KilivanaBlue,
+                    color = KilivanaGreen,
                     topLeft = Offset(0f, 0f),
                     size = androidx.compose.ui.geometry.Size(size.width, size.height)
                 )
@@ -320,9 +320,9 @@ fun InspectorLoginScreen(
                     .height(56.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = KilivanaBlue,
+                    containerColor = KilivanaGreen,
                     contentColor = Color.White,
-                    disabledContainerColor = KilivanaBlue.copy(alpha = 0.55f),
+                    disabledContainerColor = KilivanaGreen.copy(alpha = 0.55f),
                     disabledContentColor = Color.White.copy(alpha = 0.85f)
                 ),
                 contentPadding = PaddingValues(horizontal = 20.dp)
@@ -360,7 +360,7 @@ fun InspectorLoginScreen(
                 ) {
                     Text(
                         text = "Driver login",
-                        color = KilivanaBlue,
+                        color = KilivanaGreen,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )

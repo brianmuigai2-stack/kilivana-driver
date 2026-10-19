@@ -56,7 +56,6 @@ import com.example.kilivana_driver.ui.screens.notifications.NotificationsViewMod
 import com.example.kilivana_driver.ui.screens.profile.ProfileViewModel
 import com.example.kilivana_driver.ui.screens.settings.SettingsViewModel
 import com.example.kilivana_driver.ui.screens.splash.SplashScreen
-import com.example.kilivana_driver.ui.theme.KilivanaBlue
 import com.example.kilivana_driver.ui.theme.KilivanaGreen
 import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
 import com.example.kilivana_driver.ui.theme.KilivanaGreenDark
@@ -356,7 +355,7 @@ fun RoleChoicePopup(
                     .fillMaxWidth()
                     .height(52.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = KilivanaBlue,
+                    containerColor = KilivanaGreen,
                     contentColor = ComposeColor.White
                 )
             ) {

@@ -32,9 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
-import com.example.kilivana_driver.ui.theme.KilivanaBlue
-import com.example.kilivana_driver.ui.theme.KilivanaBlueCard
-import com.example.kilivana_driver.ui.theme.KilivanaBlueDark
+import com.example.kilivana_driver.ui.theme.KilivanaGreen
+import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
+import com.example.kilivana_driver.ui.theme.KilivanaGreenDark
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
@@ -62,7 +62,7 @@ fun InspectorWelcomeScreen(
                 .height(300.dp)
                 .background(
                     Brush.verticalGradient(
-                        listOf(KilivanaBlueDark, KilivanaBlue)
+                        listOf(KilivanaGreenDark, KilivanaGreen)
                     )
                 )
         ) {
@@ -79,7 +79,7 @@ fun InspectorWelcomeScreen(
                         .shadow(10.dp, CircleShape)
                         .size(78.dp)
                         .clip(CircleShape)
-                        .background(KilivanaBlueCard)
+                        .background(KilivanaGreenCard)
                     ) {
                     Text(
                         text = "✓",
@@ -140,7 +140,7 @@ fun InspectorWelcomeScreen(
                     close()
                 }
                 drawRect(
-                    color = KilivanaBlue,
+                    color = KilivanaGreen,
                     topLeft = Offset(0f, 0f),
                     size = androidx.compose.ui.geometry.Size(size.width, size.height)
                 )
@@ -179,7 +179,7 @@ fun InspectorWelcomeScreen(
                     .height(56.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = KilivanaBlue,
+                    containerColor = KilivanaGreen,
                     contentColor = Color.White
                 )
             ) {
