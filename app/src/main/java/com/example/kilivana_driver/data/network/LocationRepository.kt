@@ -96,7 +96,13 @@ class LocationRepository(
             try {
                 val response = api.reportLocation(jobId, request)
                 if (response.success != false && response.data != null) {
-                    UploadResult.Success(response.data!!)
+                    UploadResult.Success(
+                        LocationUploadResponse(
+                            success = true,
+                            message = null,
+                            serverTimestamp = response.data!!.serverTimestamp?.toLongOrNull()
+                        )
+                    )
                 } else {
                     val willRetry = isRetryableError(response.error, response.message)
                     UploadResult.Failure(

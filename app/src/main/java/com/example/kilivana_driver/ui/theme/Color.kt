@@ -24,6 +24,8 @@ private class Palette(
     val greenCard: Color,
     val textPrimary: Color,
     val blue: Color,
+    val blueDark: Color,
+    val blueCard: Color,
     val blueTint: Color,
     val notificationRed: Color,
     val amber: Color,
@@ -43,6 +45,8 @@ private val lightPalette = Palette(
     greenCard = Color(0xFF1F6B2E),
     textPrimary = Color(0xFF1C1F1D),
     blue = Color(0xFF3B82F6),
+    blueDark = Color(0xFF1E3A8A),
+    blueCard = Color(0xFF2563EB),
     blueTint = Color(0xFFE8F1FD),
     notificationRed = Color(0xFFE53935),
     amber = Color(0xFFE08A00),
@@ -62,6 +66,8 @@ private val darkPalette = Palette(
     greenCard = Color(0xFF1F6B2E),
     textPrimary = Color(0xFFECF1ED),
     blue = Color(0xFF64A5FA),
+    blueDark = Color(0xFF172554),
+    blueCard = Color(0xFF1D4ED8),
     blueTint = Color(0xFF1C2C42),
     notificationRed = Color(0xFFEF5350),
     amber = Color(0xFFF2A93C),
@@ -84,6 +90,8 @@ var KilivanaBackground by mutableStateOf(lightPalette.background)
 var KilivanaGreenCard by mutableStateOf(lightPalette.greenCard)
 var KilivanaTextPrimary by mutableStateOf(lightPalette.textPrimary)
 var KilivanaBlue by mutableStateOf(lightPalette.blue)
+var KilivanaBlueDark by mutableStateOf(lightPalette.blueDark)
+var KilivanaBlueCard by mutableStateOf(lightPalette.blueCard)
 var KilivanaBlueTint by mutableStateOf(lightPalette.blueTint)
 var KilivanaNotificationRed by mutableStateOf(lightPalette.notificationRed)
 var KilivanaAmber by mutableStateOf(lightPalette.amber)
@@ -103,6 +111,8 @@ internal fun applyKilivanaPalette(dark: Boolean) {
     KilivanaGreenCard = p.greenCard
     KilivanaTextPrimary = p.textPrimary
     KilivanaBlue = p.blue
+    KilivanaBlueDark = p.blueDark
+    KilivanaBlueCard = p.blueCard
     KilivanaBlueTint = p.blueTint
     KilivanaNotificationRed = p.notificationRed
     KilivanaAmber = p.amber

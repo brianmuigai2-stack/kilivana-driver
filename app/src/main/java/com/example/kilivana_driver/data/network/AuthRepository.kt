@@ -14,11 +14,16 @@ import retrofit2.HttpException
 
 /** The backend `role` value for a driver account. Confirm it against your API. */
 private const val DRIVER_ROLE = "DRIVER"
+/** The backend `role` value for an inspector account. Confirm it against your API. */
+const val INSPECTOR_ROLE = "INSPECTOR"
 
-private fun AuthUser.isDriver(): Boolean = role.equals(DRIVER_ROLE, ignoreCase = true)
+/** The backend `role` value the signed-in account must carry to use this app. */
+private fun AuthUser.isAllowedRole(allowedRole: String): Boolean =
+    role.equals(allowedRole, ignoreCase = true)
 
 /**
- * Signs the driver in and reads back the signed-in user.
+ * Signs an account in and reads back the signed-in user. `allowedRole` limits
+ * which role may sign in (drivers use [DRIVER_ROLE], inspectors [INSPECTOR_ROLE]).
  *
  * Same shape as the other repositories: suspend + [Result], never throws, and
  * surfaces the backend's own `error.code` / `error.details` rather than a bare
@@ -26,7 +31,8 @@ private fun AuthUser.isDriver(): Boolean = role.equals(DRIVER_ROLE, ignoreCase =
  */
 class AuthRepository(
     private val api: AuthApi = ApiClient.create(),
-    private val preferences: SessionPreferences? = null
+    private val preferences: SessionPreferences? = null,
+    private val allowedRole: String = DRIVER_ROLE
 ) {
     private val errorJson = Json { ignoreUnknownKeys = true }
 
@@ -62,7 +68,7 @@ class AuthRepository(
 
         return when (val check = checkSession()) {
             is SessionCheck.Valid -> {
-                if (check.user.isDriver()) {
+                if (check.user.isAllowedRole(allowedRole)) {
                     SessionStore.save(check.user, SessionStore.accessToken.value, SessionStore.refreshToken.value)
                     _restoreComplete.value = true
                     true
@@ -107,12 +113,13 @@ class AuthRepository(
                 val response = api.login(LoginRequest(email = email.trim(), password = password))
                 val data = response.data
                 when {
-                    // Right password, wrong kind of account (e.g. an admin): do not
-                    // keep the session. The server still enforces roles; this just
-                    // stops the driver app from opening for non-drivers.
+                    // Right password, wrong kind of account (e.g. a driver logging
+                    // into the inspector app): do not keep the session. The server
+                    // still enforces roles; this just stops the wrong app from
+                    // opening for accounts that don't carry [allowedRole].
                     response.success != false && data != null && data.accessToken.isNotBlank() &&
-                        !data.user.isDriver() -> Result.failure(
-                        Exception("This app is for Kilivana drivers only.")
+                        !data.user.isAllowedRole(allowedRole) -> Result.failure(
+                        Exception("This account is not an inspector.")
                     )
 
                     response.success != false && data != null && data.accessToken.isNotBlank() -> {

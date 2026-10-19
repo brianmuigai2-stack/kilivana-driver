@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -84,7 +85,8 @@ fun LoginScreen(
     onRememberMeChange: (Boolean) -> Unit,
     onLoginClick: () -> Unit,
     onForgotPassword: () -> Unit,
-    onContactSupport: () -> Unit
+    onContactSupport: () -> Unit,
+    onInspectorLoginClick: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
@@ -410,6 +412,35 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // SWITCH TO INSPECTOR LOGIN
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Not a driver? ",
+                    color = KilivanaTextMuted,
+                    fontSize = 13.sp
+                )
+                TextButton(
+                    onClick = onInspectorLoginClick,
+                    enabled = !uiState.isLoading,
+                    contentPadding = PaddingValues(horizontal = 2.dp)
+                ) {
+                    Text(
+                        text = "Sign in as inspector",
+                        color = KilivanaGreen,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             // FOOTER
             Text(
                 text = "KILIVANA DRIVER",
@@ -544,7 +575,8 @@ private fun LoginScreenPreview() {
             onRememberMeChange = {},
             onLoginClick = {},
             onForgotPassword = {},
-            onContactSupport = {}
+            onContactSupport = {},
+            onInspectorLoginClick = {}
         )
     }
 }
