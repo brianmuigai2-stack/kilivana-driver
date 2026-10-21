@@ -51,6 +51,7 @@ import com.example.kilivana_driver.ui.screens.login.LoginViewModel
 import com.example.kilivana_driver.ui.screens.inspector.InspectorLoginScreen
 import com.example.kilivana_driver.ui.screens.inspector.InspectorLoginViewModel
 import com.example.kilivana_driver.ui.screens.inspector.InspectorWelcomeScreen
+import com.example.kilivana_driver.ui.screens.inspector.InspectorShell
 import com.example.kilivana_driver.ui.screens.main.MainScreen
 import com.example.kilivana_driver.ui.screens.notifications.NotificationsViewModel
 import com.example.kilivana_driver.ui.screens.profile.ProfileViewModel
@@ -198,10 +199,10 @@ class MainActivity : ComponentActivity() {
                             }
                         )
 
-                        showInspectorWelcome -> InspectorWelcomeScreen(
-                            userName = inspectorUserName,
-                            onContinue = {
+                        showInspectorWelcome -> InspectorShell(
+                            onLogout = {
                                 showInspectorWelcome = false
+                                inspectorViewModel.onLogout()
                                 showRoleChoice = true
                             }
                         )
@@ -267,9 +268,11 @@ class MainActivity : ComponentActivity() {
                             onSetSystemBars = { dark, green -> setSystemBars(dark, green) }
                         )
 
-                        isSignedIn && !showRoleChoice && userRole == "INSPECTOR" -> InspectorWelcomeScreen(
-                            userName = currentUser?.name?.takeIf { it.isNotBlank() } ?: "Inspector",
-                            onContinue = { showRoleChoice = true }
+                        isSignedIn && !showRoleChoice && userRole == "INSPECTOR" -> InspectorShell(
+                            onLogout = {
+                                inspectorViewModel.onLogout()
+                                showRoleChoice = true
+                            }
                         )
 
                         else -> LoginScreen(
