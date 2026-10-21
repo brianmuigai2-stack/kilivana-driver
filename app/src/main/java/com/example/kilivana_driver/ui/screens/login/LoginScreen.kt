@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -66,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.R
 import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
+import com.example.kilivana_driver.ui.components.LoginRoleSwitcher
 import com.example.kilivana_driver.ui.components.KilivanaTextField
 import com.example.kilivana_driver.ui.theme.KilivanaError
 import com.example.kilivana_driver.ui.theme.KilivanaErrorTint
@@ -242,6 +242,14 @@ fun LoginScreen(
                 .background(KilivanaWhite)
                 .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
         ) {
+            LoginRoleSwitcher(
+                isInspectorSelected = false,
+                onDriverSelected = {},
+                onInspectorSelected = onInspectorLoginClick,
+                enabled = !uiState.isLoading
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             Text(
                 text = "Sign in",
@@ -416,33 +424,6 @@ fun LoginScreen(
             )
 
             Spacer(modifier = Modifier.height(24.dp))
-
-            // SWITCH TO INSPECTOR LOGIN
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Not a driver? ",
-                    color = KilivanaTextMuted,
-                    fontSize = 13.sp
-                )
-                TextButton(
-                    onClick = onInspectorLoginClick,
-                    enabled = !uiState.isLoading,
-                    contentPadding = PaddingValues(horizontal = 2.dp)
-                ) {
-                    Text(
-                        text = "Sign in as inspector",
-                        color = KilivanaGreen,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

@@ -12,19 +12,11 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -35,13 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.network.SessionStore
 import com.example.kilivana_driver.notifications.NotificationHelper
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardViewModel
@@ -57,11 +43,7 @@ import com.example.kilivana_driver.ui.screens.notifications.NotificationsViewMod
 import com.example.kilivana_driver.ui.screens.profile.ProfileViewModel
 import com.example.kilivana_driver.ui.screens.settings.SettingsViewModel
 import com.example.kilivana_driver.ui.screens.splash.SplashScreen
-import com.example.kilivana_driver.ui.theme.KilivanaGreen
 import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
-import com.example.kilivana_driver.ui.theme.KilivanaGreenDark
-import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
-import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 import com.yalantis.ucrop.UCrop
@@ -101,7 +83,6 @@ class MainActivity : ComponentActivity() {
 
             KilivanaTheme(darkTheme = settingsState.darkModeEnabled) {
                 var showSplash by rememberSaveable { mutableStateOf(true) }
-                var showRoleChoice by rememberSaveable { mutableStateOf(false) }
                 var showInspectorLogin by rememberSaveable { mutableStateOf(false) }
                 var showInspectorWelcome by rememberSaveable { mutableStateOf(false) }
                 var inspectorUserName by rememberSaveable { mutableStateOf("") }
@@ -166,15 +147,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // After the splash (and any remembered-session restore) finishes,
-                // if nobody is signed in, ask who wants to log in: driver or
-                // inspector. This keeps the two roles completely separate.
-                LaunchedEffect(showSplash, restoreComplete, isSignedIn) {
-                    if (!showSplash && restoreComplete && !isSignedIn) {
-                        showRoleChoice = true
-                    }
-                }
-
                 // When an inspector finishes logging in, move to the welcome
                 // screen. Inspectors never reach the driver dashboard.
                 LaunchedEffect(inspectorUiState.isLoggedIn) {
@@ -205,7 +177,6 @@ class MainActivity : ComponentActivity() {
                             onLoginClick = inspectorViewModel::onLoginClick,
                             onBackToDriverLogin = {
                                 showInspectorLogin = false
-                                showRoleChoice = true
                             }
                         )
 
@@ -213,31 +184,13 @@ class MainActivity : ComponentActivity() {
                             onLogout = {
                                 showInspectorWelcome = false
                                 inspectorViewModel.onLogout()
-                                showRoleChoice = true
+                                showInspectorLogin = false
                             }
                         )
 
-                        // When a role-choice popup is open, show nothing behind it
-                        // so the two roles stay strictly separated.
-                        showRoleChoice -> Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(KilivanaGreenDark),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            RoleChoicePopup(
-                                onDismiss = { showRoleChoice = false },
-                                onDriver = { showRoleChoice = false },
-                                onInspector = {
-                                    showRoleChoice = false
-                                    showInspectorLogin = true
-                                }
-                            )
-                        }
-
                         // Only drivers reach the driver dashboard. Inspectors stay
                         // on their own welcome screen and never see driver tabs.
-                        isSignedIn && !showRoleChoice && userRole == "DRIVER" -> MainScreen(
+                        isSignedIn && userRole == "DRIVER" -> MainScreen(
                             dashboardState = dashboardStateWithPhoto,
                             jobsState = jobsState,
                             driver = driver,
@@ -264,7 +217,10 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             onTestApiConnection = settingsViewModel::testApiConnection,
-                            onLogout = { loginViewModel.onLogout(); showRoleChoice = true },
+                            onLogout = {
+                                loginViewModel.onLogout()
+                                showInspectorLogin = false
+                            },
                             profileUiState = profileState,
                             currentUser = currentUser,
                             onPickImage = {
@@ -278,10 +234,10 @@ class MainActivity : ComponentActivity() {
                             onSetSystemBars = { dark, green -> setSystemBars(dark, green) }
                         )
 
-                        isSignedIn && !showRoleChoice && userRole == "INSPECTOR" -> InspectorShell(
+                        isSignedIn && userRole == "INSPECTOR" -> InspectorShell(
                             onLogout = {
                                 inspectorViewModel.onLogout()
-                                showRoleChoice = true
+                                showInspectorLogin = false
                             }
                         )
 
@@ -297,10 +253,7 @@ class MainActivity : ComponentActivity() {
                             onForgotPasswordSubmit = loginViewModel::onForgotPasswordSubmit,
                             onForgotPasswordDismiss = loginViewModel::onForgotPasswordDismiss,
                             onContactSupport = { /* TODO: open dialer or WhatsApp to dispatch */ },
-                            onInspectorLoginClick = {
-                                showRoleChoice = false
-                                showInspectorLogin = true
-                            }
+                            onInspectorLoginClick = { showInspectorLogin = true }
                         )
                     }
                 }
@@ -330,73 +283,4 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         )
     }
-}
-
-/**
- * Popup shown after the splash when nobody is signed in. Asks the user who they
- * want to log in as — driver or inspector — keeping the two roles strictly
- * separated so an inspector can never reach the driver dashboard.
- */
-@Composable
-fun RoleChoicePopup(
-    onDismiss: () -> Unit,
-    onDriver: () -> Unit,
-    onInspector: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .padding(16.dp)
-            .fillMaxWidth(0.88f)
-            .background(ComposeColor.White)
-            .clip(RoundedCornerShape(16.dp)),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-            Text(
-                text = "Log in as",
-                color = KilivanaTextPrimary,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "Choose who you want to log in as.",
-                color = KilivanaTextMuted,
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center
-            )
-
-            Button(
-                onClick = onInspector,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = KilivanaGreen,
-                    contentColor = ComposeColor.White
-                )
-            ) {
-                Text(
-                    text = "Inspector",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Button(
-                onClick = onDriver,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = KilivanaGreen,
-                    contentColor = ComposeColor.White
-                )
-            ) {
-                Text(
-                    text = "Driver",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
 }

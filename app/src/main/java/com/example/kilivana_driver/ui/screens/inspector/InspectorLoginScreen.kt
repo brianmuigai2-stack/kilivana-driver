@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.R
 import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
+import com.example.kilivana_driver.ui.components.LoginRoleSwitcher
 import com.example.kilivana_driver.ui.components.KilivanaTextField
 import com.example.kilivana_driver.ui.theme.KilivanaGreen
 import com.example.kilivana_driver.ui.theme.KilivanaGreenDark
@@ -224,6 +225,14 @@ fun InspectorLoginScreen(
                 .background(KilivanaWhite)
                 .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
         ) {
+            LoginRoleSwitcher(
+                isInspectorSelected = true,
+                onDriverSelected = onBackToDriverLogin,
+                onInspectorSelected = {},
+                enabled = !uiState.isLoading
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             Text(
                 text = "Inspector sign in",
@@ -343,29 +352,6 @@ fun InspectorLoginScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
-
-            // FOOTER
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Not an inspector? ",
-                    color = KilivanaTextMuted,
-                    fontSize = 13.sp
-                )
-                TextButton(
-                    onClick = onBackToDriverLogin
-                ) {
-                    Text(
-                        text = "Driver login",
-                        color = KilivanaGreen,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
