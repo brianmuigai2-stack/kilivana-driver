@@ -13,7 +13,7 @@ import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 
 /** The backend `role` value for a driver account. Confirm it against your API. */
-private const val DRIVER_ROLE = "DRIVER"
+const val DRIVER_ROLE = "DRIVER"
 /** The backend `role` value for an inspector account. Confirm it against your API. */
 const val INSPECTOR_ROLE = "INSPECTOR"
 

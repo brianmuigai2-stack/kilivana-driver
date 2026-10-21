@@ -150,8 +150,18 @@ class MainActivity : ComponentActivity() {
 
                 // Re-apply whenever either input changes, so the scrim tracks the
                 // header as the user moves between screens.
-                LaunchedEffect(showSplash, isSignedIn) {
-                    if (showSplash || !isSignedIn) {
+                LaunchedEffect(
+                    showSplash,
+                    isSignedIn,
+                    showInspectorLogin,
+                    showInspectorWelcome,
+                    currentUser?.role
+                ) {
+                    val inspectorScreen = showInspectorLogin || showInspectorWelcome ||
+                        (isSignedIn && currentUser?.role == "INSPECTOR")
+                    if (inspectorScreen) {
+                        setSystemBars(darkHeader = true, greenBand = true)
+                    } else if (showSplash || !isSignedIn) {
                         setSystemBars(darkHeader = true, greenBand = false)
                     }
                 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.JobStatus
 import com.example.kilivana_driver.data.model.JobsErrorType
+import com.example.kilivana_driver.data.network.DRIVER_ROLE
 import com.example.kilivana_driver.data.network.JobsRepository
 import com.example.kilivana_driver.data.network.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,9 +55,25 @@ class JobsViewModel(
         // so watch the session and load once it's populated. When the user
         // signs out — or a different driver signs in — clear the previous
         // driver's jobs so they don't leak across accounts.
+        //
+        // Inspectors also pass through this collector because the ViewModel
+        // is created at activity launch, but their role must not trigger
+        // driver-only logistics calls.
         viewModelScope.launch {
             SessionStore.currentUser.collect { user ->
                 if (user != null && user.id != currentUserId) {
+                    if (!user.role.equals(DRIVER_ROLE, ignoreCase = true)) {
+                        _uiState.update {
+                            it.copy(
+                                jobs = emptyList(),
+                                isLoading = false,
+                                errorMessage = null,
+                                errorType = null
+                            )
+                        }
+                        currentUserId = user.id
+                        return@collect
+                    }
                     // Different driver: wipe the stale list immediately so
                     // the old jobs are never shown to the new owner.
                     // Note: we do NOT set isLoading=true here — refresh()

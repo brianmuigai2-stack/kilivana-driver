@@ -9,6 +9,7 @@ import com.example.kilivana_driver.data.model.Driver
 import com.example.kilivana_driver.data.model.DriverImage
 import com.example.kilivana_driver.data.model.DriverProfile
 import com.example.kilivana_driver.data.model.DriverProfileRequest
+import com.example.kilivana_driver.data.network.DRIVER_ROLE
 import com.example.kilivana_driver.data.network.ProfileRepository
 import com.example.kilivana_driver.data.network.SessionStore
 import kotlinx.coroutines.Dispatchers
@@ -87,9 +88,17 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         // Created at activity launch, which is *before* the driver logs in, so
         // an eager load would always see a null session. Watching the session
         // loads once a login populates it and clears again on logout.
+        //
+        // Inspectors pass through this collector because the ViewModel is
+        // created at activity launch, but their role must not trigger
+        // driver-only profile calls.
         viewModelScope.launch {
             SessionStore.currentUser.collect { user ->
-                if (user != null) refresh() else _uiState.update { ProfileUiState() }
+                if (user != null && user.role.equals(DRIVER_ROLE, ignoreCase = true)) {
+                    refresh()
+                } else {
+                    _uiState.update { ProfileUiState() }
+                }
             }
         }
     }
