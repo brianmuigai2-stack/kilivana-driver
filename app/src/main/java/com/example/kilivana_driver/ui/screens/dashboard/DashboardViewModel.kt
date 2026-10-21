@@ -3,6 +3,7 @@ package com.example.kilivana_driver.ui.screens.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.DeliveryJob
+import com.example.kilivana_driver.data.network.DRIVER_ROLE
 import com.example.kilivana_driver.data.network.JobsRepository
 import com.example.kilivana_driver.data.network.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,7 +52,12 @@ class DashboardViewModel(
                         driverId = user?.let { "DRV-%04d".format(Locale.US, it.id) }.orEmpty()
                     )
                 }
-                if (user != null) refreshJobs()
+                // Only drivers have logistics jobs. An inspector's session
+                // reaches this ViewModel because it is created at activity
+                // launch, but their role must not trigger driver-only calls.
+                if (user != null && user.role.equals(DRIVER_ROLE, ignoreCase = true)) {
+                    refreshJobs()
+                }
             }
         }
     }
