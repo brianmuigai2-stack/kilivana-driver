@@ -8,6 +8,7 @@ import com.example.kilivana_driver.data.model.RefreshRequest
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 
 /**
  * Authentication endpoints.
@@ -22,6 +23,9 @@ interface AuthApi {
 
     @POST("api/v1/auth/login")
     suspend fun login(@Body body: LoginRequest): ApiResponse<LoginResult>
+
+    @POST("api/v1/auth/forgot-password")
+    suspend fun forgotPassword(@Query("email") email: String): ApiResponse<String>
 
     @POST("api/v1/auth/refresh")
     suspend fun refresh(@Body body: RefreshRequest): ApiResponse<LoginResult>

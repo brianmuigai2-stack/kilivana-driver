@@ -145,6 +145,26 @@ class AuthRepository(
             }
         }
 
+    /** Requests a password-reset email for the supplied address. */
+    suspend fun forgotPassword(email: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.forgotPassword(email.trim())
+                if (response.success == false) {
+                    Result.failure(Exception(describe(response.error, response.message)))
+                } else {
+                    val message = response.data?.takeIf { it.isNotBlank() }
+                        ?: response.message.takeIf { it.isNotBlank() }
+                        ?: "Password recovery request submitted."
+                    Result.success(message)
+                }
+            } catch (e: HttpException) {
+                Result.failure(Exception(readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
     /** Recovers the signed-in user from the bearer token. */
     suspend fun me(): Result<AuthUser> =
         withContext(Dispatchers.IO) {

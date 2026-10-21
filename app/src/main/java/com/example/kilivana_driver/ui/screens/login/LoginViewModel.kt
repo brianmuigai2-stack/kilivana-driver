@@ -22,7 +22,12 @@ data class LoginUiState(
     val rememberMe: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val isLoggedIn: Boolean = false
+    val isLoggedIn: Boolean = false,
+    val isForgotPasswordDialogVisible: Boolean = false,
+    val forgotPasswordEmail: String = "",
+    val isForgotPasswordLoading: Boolean = false,
+    val forgotPasswordMessage: String? = null,
+    val forgotPasswordError: String? = null
 )
 
 class LoginViewModel(application: Application) : AndroidViewModel(application) {
@@ -70,6 +75,77 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onRememberMeChange(value: Boolean) {
         _uiState.update { it.copy(rememberMe = value) }
+    }
+
+    fun onForgotPasswordClick() {
+        _uiState.update {
+            it.copy(
+                isForgotPasswordDialogVisible = true,
+                forgotPasswordEmail = it.email,
+                forgotPasswordMessage = null,
+                forgotPasswordError = null
+            )
+        }
+    }
+
+    fun onForgotPasswordEmailChange(value: String) {
+        _uiState.update {
+            it.copy(
+                forgotPasswordEmail = value,
+                forgotPasswordMessage = null,
+                forgotPasswordError = null
+            )
+        }
+    }
+
+    fun onForgotPasswordDismiss() {
+        if (!_uiState.value.isForgotPasswordLoading) {
+            _uiState.update {
+                it.copy(
+                    isForgotPasswordDialogVisible = false,
+                    forgotPasswordMessage = null,
+                    forgotPasswordError = null
+                )
+            }
+        }
+    }
+
+    fun onForgotPasswordSubmit() {
+        val email = _uiState.value.forgotPasswordEmail.trim()
+        if (_uiState.value.isForgotPasswordLoading) return
+
+        if (email.isBlank() || !email.contains("@") || !email.substringAfter("@").contains(".")) {
+            _uiState.update { it.copy(forgotPasswordError = "Enter a valid email address") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isForgotPasswordLoading = true,
+                    forgotPasswordMessage = null,
+                    forgotPasswordError = null
+                )
+            }
+
+            val result = authRepository.forgotPassword(email)
+            _uiState.update {
+                result.fold(
+                    onSuccess = { message ->
+                        it.copy(
+                            isForgotPasswordLoading = false,
+                            forgotPasswordMessage = message
+                        )
+                    },
+                    onFailure = { error ->
+                        it.copy(
+                            isForgotPasswordLoading = false,
+                            forgotPasswordError = error.message ?: "Couldn't reach the backend"
+                        )
+                    }
+                )
+            }
+        }
     }
 
     fun onLoginClick() {

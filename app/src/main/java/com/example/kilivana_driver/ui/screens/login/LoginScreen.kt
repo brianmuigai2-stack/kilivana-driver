@@ -34,11 +34,13 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -85,6 +87,9 @@ fun LoginScreen(
     onRememberMeChange: (Boolean) -> Unit,
     onLoginClick: () -> Unit,
     onForgotPassword: () -> Unit,
+    onForgotPasswordEmailChange: (String) -> Unit,
+    onForgotPasswordSubmit: () -> Unit,
+    onForgotPasswordDismiss: () -> Unit,
     onContactSupport: () -> Unit,
     onInspectorLoginClick: () -> Unit
 ) {
@@ -453,6 +458,75 @@ fun LoginScreen(
             )
         }
     }
+
+    if (uiState.isForgotPasswordDialogVisible) {
+        AlertDialog(
+            onDismissRequest = onForgotPasswordDismiss,
+            title = { Text("Reset your password") },
+            text = {
+                Column {
+                    Text("Enter the email address associated with your driver account.")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = uiState.forgotPasswordEmail,
+                        onValueChange = onForgotPasswordEmailChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Email address") },
+                        placeholder = { Text("driver@example.com") },
+                        singleLine = true,
+                        enabled = !uiState.isForgotPasswordLoading && uiState.forgotPasswordMessage == null,
+                        isError = uiState.forgotPasswordError != null,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = { onForgotPasswordSubmit() }
+                        )
+                    )
+                    uiState.forgotPasswordError?.let { error ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = error, color = KilivanaError, fontSize = 13.sp)
+                    }
+                    uiState.forgotPasswordMessage?.let { message ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = message, color = KilivanaGreen, fontSize = 13.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                if (uiState.forgotPasswordMessage != null) {
+                    TextButton(onClick = onForgotPasswordDismiss) {
+                        Text("Done")
+                    }
+                } else {
+                    TextButton(
+                        onClick = onForgotPasswordSubmit,
+                        enabled = !uiState.isForgotPasswordLoading
+                    ) {
+                        if (uiState.isForgotPasswordLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Send reset link")
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                if (uiState.forgotPasswordMessage == null) {
+                    TextButton(
+                        onClick = onForgotPasswordDismiss,
+                        enabled = !uiState.isForgotPasswordLoading
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
+    }
 }
 
 // ================================================================
@@ -575,6 +649,9 @@ private fun LoginScreenPreview() {
             onRememberMeChange = {},
             onLoginClick = {},
             onForgotPassword = {},
+            onForgotPasswordEmailChange = {},
+            onForgotPasswordSubmit = {},
+            onForgotPasswordDismiss = {},
             onContactSupport = {},
             onInspectorLoginClick = {}
         )

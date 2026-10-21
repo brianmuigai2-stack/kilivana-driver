@@ -292,7 +292,10 @@ class MainActivity : ComponentActivity() {
                             onTogglePasswordVisibility = loginViewModel::onTogglePasswordVisibility,
                             onRememberMeChange = loginViewModel::onRememberMeChange,
                             onLoginClick = loginViewModel::onLoginClick,
-                            onForgotPassword = { /* TODO: tell the driver to ask their admin for a reset */ },
+                            onForgotPassword = loginViewModel::onForgotPasswordClick,
+                            onForgotPasswordEmailChange = loginViewModel::onForgotPasswordEmailChange,
+                            onForgotPasswordSubmit = loginViewModel::onForgotPasswordSubmit,
+                            onForgotPasswordDismiss = loginViewModel::onForgotPasswordDismiss,
                             onContactSupport = { /* TODO: open dialer or WhatsApp to dispatch */ },
                             onInspectorLoginClick = {
                                 showRoleChoice = false
