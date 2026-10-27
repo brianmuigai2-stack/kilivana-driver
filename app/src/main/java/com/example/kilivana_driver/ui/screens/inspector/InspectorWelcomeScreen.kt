@@ -25,7 +25,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -60,6 +59,7 @@ fun InspectorWelcomeScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(300.dp)
+                .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
                 .background(
                     Brush.verticalGradient(
                         listOf(KilivanaGreenDark, KilivanaGreen)
@@ -67,6 +67,19 @@ fun InspectorWelcomeScreen(
                 )
         ) {
             KilivanaStatusBarScrim()
+
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.05f),
+                    radius = size.width * 0.55f,
+                    center = Offset(size.width * 0.9f, size.height * 0.12f)
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.04f),
+                    radius = size.width * 0.3f,
+                    center = Offset(size.width * 0.05f, size.height * 0.8f)
+                )
+            }
 
             Column(
                 modifier = Modifier
@@ -79,8 +92,9 @@ fun InspectorWelcomeScreen(
                         .shadow(10.dp, CircleShape)
                         .size(78.dp)
                         .clip(CircleShape)
-                        .background(KilivanaGreenCard)
-                    ) {
+                        .background(KilivanaGreenCard),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
                         text = "✓",
                         color = Color.White,
@@ -121,38 +135,12 @@ fun InspectorWelcomeScreen(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(36.dp)
-                .background(KilivanaWhite)
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val path = Path().apply {
-                    moveTo(0f, size.height)
-                    cubicTo(
-                        size.width * 0.25f, 0f,
-                        size.width * 0.75f, size.height,
-                        size.width, 0f
-                    )
-                    lineTo(size.width, size.height)
-                    lineTo(0f, size.height)
-                    close()
-                }
-                drawRect(
-                    color = KilivanaGreen,
-                    topLeft = Offset(0f, 0f),
-                    size = androidx.compose.ui.geometry.Size(size.width, size.height)
-                )
-                drawPath(path = path, color = KilivanaWhite)
-            }
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(KilivanaWhite)
-                .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
+                .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = "Signed in successfully",
@@ -167,7 +155,8 @@ fun InspectorWelcomeScreen(
                 text = "Your inspector account is ready to verify pickups and deliveries.",
                 color = KilivanaTextMuted,
                 fontSize = 13.sp,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
             )
 
             Spacer(modifier = Modifier.height(32.dp))

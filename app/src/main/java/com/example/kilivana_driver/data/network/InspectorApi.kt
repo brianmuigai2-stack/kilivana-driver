@@ -3,11 +3,17 @@ package com.example.kilivana_driver.data.network
 import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.InspectionDto
 import com.example.kilivana_driver.data.model.InspectionFindingRequest
+import com.example.kilivana_driver.data.model.InspectionEvidenceImage
+import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.PUT
+import retrofit2.http.Multipart
+import retrofit2.http.Part
+import retrofit2.http.DELETE
 import retrofit2.http.Path
+import retrofit2.http.POST
 import retrofit2.http.Query
 
 /**
@@ -38,4 +44,20 @@ interface InspectorApi {
         @Query("result") result: String,
         @Body request: InspectionFindingRequest
     ): Response<ApiResponse<InspectionDto>>
+
+    @GET("api/v1/inspections/{id}/evidence/images")
+    suspend fun evidenceImages(@Path("id") id: Long): Response<ApiResponse<List<InspectionEvidenceImage>>>
+
+    @Multipart
+    @POST("api/v1/inspections/{id}/evidence/images")
+    suspend fun uploadEvidence(
+        @Path("id") id: Long,
+        @Part image: MultipartBody.Part
+    ): Response<ApiResponse<List<InspectionEvidenceImage>>>
+
+    @DELETE("api/v1/inspections/{id}/evidence/images/{imageId}")
+    suspend fun deleteEvidence(
+        @Path("id") id: Long,
+        @Path("imageId") imageId: Long
+    ): Response<ApiResponse<Unit>>
 }

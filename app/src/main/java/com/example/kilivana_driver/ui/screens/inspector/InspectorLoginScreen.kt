@@ -33,9 +33,13 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -78,7 +82,12 @@ fun InspectorLoginScreen(
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onTogglePasswordVisibility: () -> Unit,
+    onRememberMeChange: (Boolean) -> Unit,
     onLoginClick: () -> Unit,
+    onForgotPassword: () -> Unit,
+    onForgotPasswordEmailChange: (String) -> Unit,
+    onForgotPasswordSubmit: () -> Unit,
+    onForgotPasswordDismiss: () -> Unit,
     onBackToDriverLogin: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
@@ -309,6 +318,44 @@ fun InspectorLoginScreen(
                 )
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = !uiState.isLoading) {
+                            onRememberMeChange(!uiState.rememberMe)
+                        },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = uiState.rememberMe,
+                        onCheckedChange = { if (!uiState.isLoading) onRememberMeChange(it) },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = KilivanaGreen,
+                            uncheckedColor = KilivanaTextMuted,
+                            checkmarkColor = KilivanaWhite
+                        )
+                    )
+                    Text("Keep me signed in", color = KilivanaTextPrimary, fontSize = 14.sp)
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(
+                    onClick = onForgotPassword,
+                    enabled = !uiState.isLoading,
+                    contentPadding = PaddingValues(horizontal = 2.dp)
+                ) {
+                    Text(
+                        "Forgot password?",
+                        color = KilivanaGreen,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
             // ERROR
             uiState.errorMessage?.let { message ->
                 Spacer(modifier = Modifier.height(10.dp))
@@ -365,6 +412,68 @@ fun InspectorLoginScreen(
                 textAlign = TextAlign.Center
             )
         }
+    }
+
+    if (uiState.isForgotPasswordDialogVisible) {
+        AlertDialog(
+            onDismissRequest = onForgotPasswordDismiss,
+            title = { Text("Reset your password") },
+            text = {
+                Column {
+                    Text("Enter the email address associated with your inspector account.")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = uiState.forgotPasswordEmail,
+                        onValueChange = onForgotPasswordEmailChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Email address") },
+                        placeholder = { Text("inspector@example.com") },
+                        singleLine = true,
+                        enabled = !uiState.isForgotPasswordLoading && uiState.forgotPasswordMessage == null,
+                        isError = uiState.forgotPasswordError != null,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { onForgotPasswordSubmit() })
+                    )
+                    uiState.forgotPasswordError?.let { error ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(error, color = KilivanaError, fontSize = 13.sp)
+                    }
+                    uiState.forgotPasswordMessage?.let { message ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(message, color = KilivanaGreen, fontSize = 13.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                if (uiState.forgotPasswordMessage != null) {
+                    TextButton(onClick = onForgotPasswordDismiss) { Text("Done") }
+                } else {
+                    TextButton(
+                        onClick = onForgotPasswordSubmit,
+                        enabled = !uiState.isForgotPasswordLoading
+                    ) {
+                        if (uiState.isForgotPasswordLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Send reset link")
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                if (uiState.forgotPasswordMessage == null) {
+                    TextButton(
+                        onClick = onForgotPasswordDismiss,
+                        enabled = !uiState.isForgotPasswordLoading
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
     }
 }
 
@@ -426,7 +535,12 @@ private fun InspectorLoginScreenPreview() {
             onEmailChange = {},
             onPasswordChange = {},
             onTogglePasswordVisibility = {},
+            onRememberMeChange = {},
             onLoginClick = {},
+            onForgotPassword = {},
+            onForgotPasswordEmailChange = {},
+            onForgotPasswordSubmit = {},
+            onForgotPasswordDismiss = {},
             onBackToDriverLogin = {}
         )
     }

@@ -32,14 +32,7 @@ android {
 
     buildTypes {
         debug {
-            // R8 is enabled only so it computes a main-dex list
-            // from multidex-keep.pro. Shrinking, obfuscation and
-            // optimization are all disabled in that file, so the
-            // output is identical to a plain debug build — the
-            // only change is that the Application class is forced
-            // into the primary dex.
-            isMinifyEnabled = true
-            multiDexKeepProguard = file("multidex-keep.pro")
+            isMinifyEnabled = false
         }
         release {
             isMinifyEnabled = false

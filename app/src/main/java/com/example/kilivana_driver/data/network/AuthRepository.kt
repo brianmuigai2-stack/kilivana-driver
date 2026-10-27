@@ -32,7 +32,8 @@ private fun AuthUser.isAllowedRole(allowedRole: String): Boolean =
 class AuthRepository(
     private val api: AuthApi = ApiClient.create(),
     private val preferences: SessionPreferences? = null,
-    private val allowedRole: String = DRIVER_ROLE
+    private val allowedRole: String = DRIVER_ROLE,
+    private val restoreAllowedRoles: Set<String> = setOf(allowedRole)
 ) {
     private val errorJson = Json { ignoreUnknownKeys = true }
 
@@ -68,7 +69,7 @@ class AuthRepository(
 
         return when (val check = checkSession()) {
             is SessionCheck.Valid -> {
-                if (check.user.isAllowedRole(allowedRole)) {
+                if (restoreAllowedRoles.any(check.user::isAllowedRole)) {
                     SessionStore.save(check.user, SessionStore.accessToken.value, SessionStore.refreshToken.value)
                     _restoreComplete.value = true
                     true
