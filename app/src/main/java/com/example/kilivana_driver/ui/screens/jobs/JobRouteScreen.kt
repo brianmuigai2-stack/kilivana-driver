@@ -128,6 +128,9 @@ fun JobRouteScreen(
     val distanceLabel by tripViewModel.distanceLabel.collectAsStateWithLifecycle()
     val queueSize by tripViewModel.queueSize.collectAsStateWithLifecycle()
     val trackingPoints by tripViewModel.trackingPoints.collectAsStateWithLifecycle()
+    val isSubmittingProof by tripViewModel.isSubmittingProof.collectAsStateWithLifecycle()
+    val proofError by tripViewModel.proofError.collectAsStateWithLifecycle()
+    val proofFiled by tripViewModel.proofFiled.collectAsStateWithLifecycle()
 
     // Convert backend TripStage to UI stage
     val uiStage = remember { mutableStateOf(UiTripStage.HEADING_TO_PICKUP) }
@@ -305,7 +308,13 @@ fun JobRouteScreen(
     }
 
     var showOtpDialog by remember { mutableStateOf(false) }
+    var showProofDialog by remember { mutableStateOf(false) }
     var otpError by remember { mutableStateOf<String?>(null) }
+    var deliveryOtp by remember { mutableStateOf("") }
+
+    LaunchedEffect(proofFiled) {
+        if (proofFiled) onDeliveryComplete()
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
@@ -546,18 +555,39 @@ fun JobRouteScreen(
             jobId = job.id,
             error = otpError,
             onConfirm = { entered ->
-                if (entered == job.deliveryOtp) {
+                if (entered.isNotBlank()) {
+                    deliveryOtp = entered
                     showOtpDialog = false
                     otpError = null
-                    tripViewModel.completeDelivery()
-                    onDeliveryComplete()
+                    showProofDialog = true
                 } else {
-                    otpError = "That code doesn't match. Ask the buyer to double-check it."
+                    otpError = "Enter the buyer's delivery code."
                 }
             },
             onDismiss = {
                 showOtpDialog = false
                 otpError = null
+            }
+        )
+    }
+
+    if (showProofDialog) {
+        DeliveryProofDialog(
+            isSubmitting = isSubmittingProof,
+            error = proofError,
+            onSubmit = { recipientName, photoUrl, signatureUrl ->
+                tripViewModel.fileDeliveryProof(
+                    otp = deliveryOtp,
+                    recipientName = recipientName,
+                    photoUrl = photoUrl,
+                    signatureUrl = signatureUrl
+                )
+            },
+            onDismiss = {
+                if (!isSubmittingProof) {
+                    showProofDialog = false
+                    deliveryOtp = ""
+                }
             }
         )
     }
@@ -711,7 +741,7 @@ private fun OtpDialog(
         text = {
             Column {
                 Text(
-                    text = "Ask the buyer for their delivery code and enter it to confirm $jobId was delivered.",
+                    text = "Ask the buyer for their delivery code. You'll add delivery evidence next.",
                     color = KilivanaTextMuted,
                     fontSize = 14.sp
                 )
@@ -738,6 +768,76 @@ private fun OtpDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel", color = KilivanaTextMuted) }
+        }
+    )
+}
+
+@Composable
+private fun DeliveryProofDialog(
+    isSubmitting: Boolean,
+    error: String?,
+    onSubmit: (String, String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var recipientName by remember { mutableStateOf("") }
+    var photoUrl by remember { mutableStateOf("") }
+    var signatureUrl by remember { mutableStateOf("") }
+    val hasEvidence = photoUrl.isNotBlank() || signatureUrl.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delivery evidence") },
+        text = {
+            Column {
+                Text(
+                    text = "The delivery code will be checked when you submit the proof.",
+                    color = KilivanaTextMuted,
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = recipientName,
+                    onValueChange = { recipientName = it },
+                    label = { Text("Recipient name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = photoUrl,
+                    onValueChange = { photoUrl = it },
+                    label = { Text("Evidence photo URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = signatureUrl,
+                    onValueChange = { signatureUrl = it },
+                    label = { Text("Signature URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(text = error, color = KilivanaNotificationRed, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSubmit(recipientName, photoUrl, signatureUrl) },
+                enabled = !isSubmitting && hasEvidence
+            ) {
+                Text(
+                    text = if (isSubmitting) "Submitting..." else "Submit proof",
+                    color = KilivanaGreen,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isSubmitting) {
+                Text("Cancel", color = KilivanaTextMuted)
+            }
         }
     )
 }

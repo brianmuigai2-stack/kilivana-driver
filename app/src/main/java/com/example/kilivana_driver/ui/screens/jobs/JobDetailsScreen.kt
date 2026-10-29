@@ -226,7 +226,7 @@ fun JobDetailsScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(14.dp))
-                DetailRow("Distance", "${job.distanceKm} km")
+                DetailRow("Distance", job.distanceLabel)
                 Spacer(modifier = Modifier.height(12.dp))
                 DetailRow("Estimated Time", job.estimatedTime)
                 Spacer(modifier = Modifier.height(12.dp))
@@ -246,7 +246,11 @@ fun JobDetailsScreen(
             ) {
                 when (job.status) {
                     JobStatus.AVAILABLE -> {
-                        KilivanaButton(text = "Accept Job", onClick = onAccept)
+                        KilivanaButton(
+                            text = "Accept Job",
+                            onClick = onAccept,
+                            enabled = job.distanceKm > 0.0
+                        )
                         OutlinedButton(
                             onClick = { showDeclineDialog = true },
                             modifier = Modifier

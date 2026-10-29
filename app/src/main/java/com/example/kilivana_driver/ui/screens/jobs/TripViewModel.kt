@@ -6,12 +6,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.LocationUpdate
+import com.example.kilivana_driver.data.model.ProofOfDelivery
 import com.example.kilivana_driver.data.model.TrackingConfig
 import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import com.example.kilivana_driver.data.model.TripStage
 import com.example.kilivana_driver.data.model.UploadResult
 import com.example.kilivana_driver.data.network.JobsRepository
 import com.example.kilivana_driver.data.network.LocationRepository
+import com.example.kilivana_driver.data.network.ProofOfDeliveryRepository
 import com.example.kilivana_driver.data.network.SessionStore
 import com.example.kilivana_driver.data.network.TripRepository
 import com.example.kilivana_driver.ui.screens.map.GeoPoint
@@ -43,6 +45,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     private val locationRepository = LocationRepository()
     private val tripRepository = TripRepository(locationRepository = locationRepository)
     private val jobsRepository = JobsRepository()
+    private val proofRepository = ProofOfDeliveryRepository()
     private val trackingConfig = TrackingConfig.DEFAULT
 
     // ---- Inputs from the screen ----
@@ -67,6 +70,15 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Last error from trip operations. */
     val lastError: StateFlow<String?> = tripRepository.lastError
+
+    private val _isSubmittingProof = MutableStateFlow(false)
+    val isSubmittingProof: StateFlow<Boolean> = _isSubmittingProof.asStateFlow()
+
+    private val _proofError = MutableStateFlow<String?>(null)
+    val proofError: StateFlow<String?> = _proofError.asStateFlow()
+
+    private val _proofFiled = MutableStateFlow(false)
+    val proofFiled: StateFlow<Boolean> = _proofFiled.asStateFlow()
 
     /** Active trip ID (null when no trip is being tracked). */
     val activeTripId: StateFlow<String?> = tripRepository.activeTripId
@@ -107,6 +119,9 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     /** Initializes the ViewModel with a job and starts tracking. */
     fun initialize(job: Job) {
         _job = job
+        _isSubmittingProof.value = false
+        _proofError.value = null
+        _proofFiled.value = false
         _targetGeoPoint = GeoPoint(job.pickupLat, job.pickupLon)
         _routePoints.value = null
         _usingEstimatedRoute.value = false
@@ -178,6 +193,51 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     fun completeDelivery() {
         viewModelScope.launch {
             tripRepository.stopTracking("COMPLETED")
+        }
+    }
+
+    /** Files proof with the buyer's OTP; the backend validates both together. */
+    fun fileDeliveryProof(
+        otp: String,
+        recipientName: String,
+        photoUrl: String,
+        signatureUrl: String
+    ) {
+        if (_isSubmittingProof.value) return
+        val jobId = _job?.id?.toLongOrNull()
+        if (jobId == null) {
+            _proofError.value = "This job has an invalid ID."
+            return
+        }
+        if (otp.isBlank()) {
+            _proofError.value = "Enter the buyer's delivery code."
+            return
+        }
+        if (photoUrl.isBlank() && signatureUrl.isBlank()) {
+            _proofError.value = "Add a photo or signature as delivery evidence."
+            return
+        }
+
+        viewModelScope.launch {
+            _isSubmittingProof.value = true
+            _proofError.value = null
+            val proof = ProofOfDelivery(
+                logisticsJobId = jobId,
+                recipientName = recipientName.trim().takeIf { it.isNotEmpty() },
+                photoUrl = photoUrl.trim().takeIf { it.isNotEmpty() },
+                signatureUrl = signatureUrl.trim().takeIf { it.isNotEmpty() }
+            )
+            val result = proofRepository.file(proof, otp.trim())
+            _isSubmittingProof.value = false
+            result.fold(
+                onSuccess = {
+                    _proofFiled.value = true
+                    completeDelivery()
+                },
+                onFailure = { error ->
+                    _proofError.value = error.message ?: "Could not submit delivery proof."
+                }
+            )
         }
     }
 

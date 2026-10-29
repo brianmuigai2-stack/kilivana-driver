@@ -268,12 +268,16 @@ fun InspectorShell(
         }
     }
 
-    val assignedCount = assignments.count { it.status == "ASSIGNED" }
-    val pendingCount = assignments.count { it.status == "PENDING" }
-    val completedCount = assignments.count { it.status == "COMPLETED" }
-    val rejectedCount = assignments.count { it.result == InspectionFinding.REJECTED.name }
+    val openCount = assignments.count {
+        it.hasStatus(InspectionStatus.ASSIGNED) ||
+            it.hasStatus(InspectionStatus.PENDING) ||
+            it.hasStatus(InspectionStatus.IN_PROGRESS)
+    }
+    val completedCount = assignments.count { it.hasStatus(InspectionStatus.COMPLETED) }
     val historyItems = assignments.filter {
-        it.status == "COMPLETED" || it.status == "CANCELLED" || !it.result.isNullOrBlank()
+        it.hasStatus(InspectionStatus.COMPLETED) ||
+            it.hasStatus(InspectionStatus.CANCELLED) ||
+            !it.result.isNullOrBlank()
     }
     val sourceItems = if (selectedTab == InspectorTab.HISTORY) historyItems else assignments
     val filteredItems = sourceItems.filter { item ->
@@ -283,11 +287,11 @@ fun InspectorShell(
             item.result, item.notes
         ).any { it.contains(query, ignoreCase = true) }
         val matchesFilter = when (queueFilter) {
-            "Assigned" -> item.status == "ASSIGNED"
-            "Pending" -> item.status == "PENDING"
-            "In progress" -> item.status == "IN_PROGRESS"
-            "Completed" -> item.status == "COMPLETED"
-            "Rejected" -> item.result == InspectionFinding.REJECTED.name
+            "Assigned" -> item.hasStatus(InspectionStatus.ASSIGNED)
+            "Pending" -> item.hasStatus(InspectionStatus.PENDING)
+            "In progress" -> item.hasStatus(InspectionStatus.IN_PROGRESS)
+            "Completed" -> item.hasStatus(InspectionStatus.COMPLETED)
+            "Rejected" -> item.result.equals(InspectionFinding.REJECTED.name, ignoreCase = true)
             else -> true
         }
         matchesQuery && matchesFilter
@@ -315,11 +319,18 @@ fun InspectorShell(
                 }
                 item {
                     InspectorSummary(
-                        assigned = assignedCount,
-                        pending = pendingCount,
-                        completed = completedCount,
-                        rejected = rejectedCount
+                        open = openCount,
+                        completed = completedCount
                     )
+                }
+                if (error != null) {
+                    item {
+                        Text(
+                            text = error.orEmpty(),
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
                 }
                 item {
                     Row(
@@ -335,8 +346,16 @@ fun InspectorShell(
                             fontSize = 19.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        TextButton(onClick = { selectedTab = InspectorTab.INSPECTIONS }) {
-                            Text("View all", color = KilivanaGreen)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(
+                                onClick = { refreshAssignments() },
+                                enabled = !isLoading && !isSaving
+                            ) {
+                                Text("Refresh", color = KilivanaGreen)
+                            }
+                            TextButton(onClick = { selectedTab = InspectorTab.INSPECTIONS }) {
+                                Text("View all", color = KilivanaGreen)
+                            }
                         }
                     }
                 }
@@ -346,7 +365,7 @@ fun InspectorShell(
                     }
                 } else {
                     items(
-                        assignments.take(3),
+                        assignments.take(2),
                         key = { it.id ?: it.hashCode().toLong() }
                     ) { item ->
                         InspectionCard(item = item, onClick = { openInspection(item) })
@@ -360,15 +379,6 @@ fun InspectorShell(
                         ) {
                             CircularProgressIndicator(color = KilivanaGreen)
                         }
-                    }
-                }
-                if (error != null) {
-                    item {
-                        Text(
-                            text = error.orEmpty(),
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
                     }
                 }
                 item { Spacer(Modifier.height(16.dp)) }
@@ -1311,10 +1321,8 @@ private fun InspectionCard(
 
 @Composable
 private fun InspectorSummary(
-    assigned: Int,
-    pending: Int,
-    completed: Int,
-    rejected: Int
+    open: Int,
+    completed: Int
 ) {
     Box(
         modifier = Modifier
@@ -1341,17 +1349,18 @@ private fun InspectorSummary(
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    InspectorMetric("Assigned", assigned, KilivanaGreen, Modifier.weight(1f))
-                    InspectorMetric("Pending", pending, KilivanaAmber, Modifier.weight(1f))
-                    InspectorMetric("Completed", completed, KilivanaBlue, Modifier.weight(1f))
-                    InspectorMetric("Rejected", rejected, MaterialTheme.colorScheme.error, Modifier.weight(1f))
+                    InspectorMetric("Open", open, KilivanaAmber, Modifier.weight(1f))
+                    InspectorMetric("Completed", completed, KilivanaGreen, Modifier.weight(1f))
                 }
             }
         }
     }
 }
+
+private fun InspectionDto.hasStatus(expected: InspectionStatus): Boolean =
+    status.equals(expected.name, ignoreCase = true)
 
 @Composable
 private fun InspectorProfileCard(user: AuthUser?) {
