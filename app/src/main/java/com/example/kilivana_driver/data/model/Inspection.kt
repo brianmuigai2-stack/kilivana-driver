@@ -12,9 +12,32 @@ data class InspectionDto(
     val result: String? = null,
     val notes: String? = null,
     val evidenceUrls: String? = null,
+    val targetFarm: FarmResponse? = null,
     val inspectedAt: String? = null,
     val createdAt: String? = null,
     val updatedAt: String? = null
+)
+
+/** Farm details embedded by the inspection endpoint for FARM targets. */
+@Serializable
+data class FarmResponse(
+    val id: Long? = null,
+    val name: String? = null,
+    val farmName: String? = null,
+    val location: String? = null,
+    val county: String? = null,
+    val subCounty: String? = null,
+    val ownerName: String? = null,
+    val ownerPhone: String? = null,
+    val ownerEmail: String? = null
+)
+
+@Serializable
+data class InspectionEvidenceImage(
+    val id: Long = 0L,
+    val url: String = "",
+    val publicId: String = "",
+    val createdAt: String = ""
 )
 
 @Serializable

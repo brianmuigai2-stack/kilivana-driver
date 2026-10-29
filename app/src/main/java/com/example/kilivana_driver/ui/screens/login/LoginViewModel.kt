@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.network.AuthRepository
+import com.example.kilivana_driver.data.network.DRIVER_ROLE
+import com.example.kilivana_driver.data.network.INSPECTOR_ROLE
 import com.example.kilivana_driver.data.network.SessionPreferences
 import com.example.kilivana_driver.data.network.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +38,8 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
     private val authRepository = AuthRepository(
-        preferences = SessionPreferences(getApplication())
+        preferences = SessionPreferences(getApplication()),
+        restoreAllowedRoles = setOf(DRIVER_ROLE, INSPECTOR_ROLE)
     )
 
     /** False while we're still checking for a remembered session on startup. */

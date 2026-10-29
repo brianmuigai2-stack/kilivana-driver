@@ -1,5 +1,7 @@
 package com.example.kilivana_driver.data.model
 
+import java.util.Locale
+
 /**
  * Lifecycle of a delivery job, as shown by the Jobs screen tabs.
  *
@@ -43,11 +45,18 @@ data class Job(
     val dropoffLon: Double,
     val cargo: String,
     val quantity: String,
-    val distanceKm: Int,
+    val distanceKm: Double,
     val estimatedTime: String,
     val payoutKsh: Int,
     val customer: String,
     val deliveryOtp: String,
     val status: JobStatus,
     val isNew: Boolean = false
-)
+) {
+    val distanceLabel: String
+        get() = if (distanceKm > 0.0) {
+            String.format(Locale.US, "%.1f km", distanceKm)
+        } else {
+            "Distance unavailable"
+        }
+}

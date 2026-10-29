@@ -174,7 +174,12 @@ class MainActivity : ComponentActivity() {
                             onEmailChange = inspectorViewModel::onEmailChange,
                             onPasswordChange = inspectorViewModel::onPasswordChange,
                             onTogglePasswordVisibility = inspectorViewModel::onTogglePasswordVisibility,
+                            onRememberMeChange = inspectorViewModel::onRememberMeChange,
                             onLoginClick = inspectorViewModel::onLoginClick,
+                            onForgotPassword = inspectorViewModel::onForgotPasswordClick,
+                            onForgotPasswordEmailChange = inspectorViewModel::onForgotPasswordEmailChange,
+                            onForgotPasswordSubmit = inspectorViewModel::onForgotPasswordSubmit,
+                            onForgotPasswordDismiss = inspectorViewModel::onForgotPasswordDismiss,
                             onBackToDriverLogin = {
                                 showInspectorLogin = false
                             }
@@ -183,6 +188,13 @@ class MainActivity : ComponentActivity() {
                         showInspectorWelcome -> InspectorShell(
                             onLogout = {
                                 showInspectorWelcome = false
+                                inspectorViewModel.onLogout()
+                                showInspectorLogin = false
+                            }
+                        )
+
+                        isSignedIn && userRole == "INSPECTOR" -> InspectorShell(
+                            onLogout = {
                                 inspectorViewModel.onLogout()
                                 showInspectorLogin = false
                             }

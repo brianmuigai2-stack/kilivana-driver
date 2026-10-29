@@ -1,15 +1,72 @@
 package com.example.kilivana_driver.data.network
 
+import android.content.ContentResolver
+import android.net.Uri
 import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.InspectionDto
+import com.example.kilivana_driver.data.model.InspectionEvidenceImage
 import com.example.kilivana_driver.data.model.InspectionFinding
 import com.example.kilivana_driver.data.model.InspectionFindingRequest
 import com.example.kilivana_driver.data.model.InspectionStatus
 import retrofit2.Response
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.File
 
 class InspectorRepository(
     private val api: InspectorApi = ApiClient.create()
 ) {
+
+    suspend fun getEvidence(id: Long): List<InspectionEvidenceImage> {
+        getInspection(id)
+        return read(api.evidenceImages(id))
+    }
+
+    suspend fun uploadEvidence(
+        id: Long,
+        contentResolver: ContentResolver,
+        uri: Uri,
+        cacheDir: File
+    ): List<InspectionEvidenceImage> = withContext(Dispatchers.IO) {
+        getInspection(id)
+        val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
+        require(mimeType.startsWith("image/")) { "Choose an image file for evidence." }
+        val extension = when (mimeType.substringAfter('/', "jpeg").lowercase()) {
+            "png" -> ".png"
+            "webp" -> ".webp"
+            else -> ".jpg"
+        }
+        val file = File.createTempFile("inspection-evidence-", extension, cacheDir)
+        try {
+            val input = contentResolver.openInputStream(uri)
+                ?: throw IllegalStateException("Could not read the selected image.")
+            input.use { source ->
+                file.outputStream().use { destination -> source.copyTo(destination) }
+            }
+            val part = MultipartBody.Part.createFormData(
+                name = "image",
+                filename = file.name,
+                body = file.asRequestBody(mimeType.toMediaTypeOrNull())
+            )
+            read(api.uploadEvidence(id, part))
+        } finally {
+            file.delete()
+        }
+    }
+
+    suspend fun deleteEvidence(id: Long, imageId: Long) {
+        getInspection(id)
+        val response = api.deleteEvidence(id, imageId)
+        if (!response.isSuccessful) {
+            response.errorBody()?.close()
+            throw IllegalStateException("Could not remove this evidence photo.")
+        }
+        val envelope = response.body() ?: throw IllegalStateException("The server returned an empty response.")
+        if (envelope.success == false) throw IllegalStateException(envelope.message.ifBlank { "Could not remove this evidence photo." })
+    }
 
     private fun requireInspectorId(): Long {
         val user = SessionStore.currentUser.value
@@ -87,6 +144,11 @@ class InspectorRepository(
         }
 
         val current = getInspection(id)
+        if (current.status != InspectionStatus.IN_PROGRESS.name) {
+            throw IllegalStateException(
+                "Only inspections in progress can be submitted."
+            )
+        }
         val inspectorId = requireInspectorId()
 
         val request = InspectionFindingRequest(
@@ -97,9 +159,7 @@ class InspectorRepository(
             targetId = current.targetId
                 ?.takeIf { it > 0L }
                 ?: throw IllegalStateException("The inspection has an invalid target ID."),
-            status = current.status
-                ?.takeIf { InspectionStatus.from(it) != null }
-                ?: throw IllegalStateException("The inspection has an unsupported status."),
+            status = InspectionStatus.COMPLETED.name,
             result = finding.name,
             notes = cleanNotes
         )
@@ -107,6 +167,11 @@ class InspectorRepository(
         val updated = read(api.updateResult(id, finding.name, request))
         if (updated.id != id || updated.inspectorId != inspectorId) {
             throw IllegalStateException("The submitted findings could not be verified.")
+        }
+        if (updated.status != InspectionStatus.COMPLETED.name) {
+            throw IllegalStateException(
+                "The findings were saved, but the inspection status could not be completed."
+            )
         }
         return updated
     }

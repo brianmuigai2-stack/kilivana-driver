@@ -74,4 +74,9 @@ interface ProfileApi {
         @Path("userId") userId: Long,
         @Path("imageId") imageId: Long
     ): ApiResponse<Unit>
+    @PUT("api/v1/profiles/drivers/{userId}/images/{imageId}/primary")
+    suspend fun setPrimaryDriverImage(
+        @Path("userId") userId: Long,
+        @Path("imageId") imageId: Long
+    ): ApiResponse<Unit>
 }

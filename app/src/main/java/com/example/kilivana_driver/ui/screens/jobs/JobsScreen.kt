@@ -306,7 +306,7 @@ private fun JobCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "${job.quantity} • ${job.distanceKm} km • ${job.estimatedTime}",
+                    text = "${job.quantity} • ${job.distanceLabel} • ${job.estimatedTime}",
                     color = KilivanaTextMuted,
                     fontSize = 13.sp
                 )

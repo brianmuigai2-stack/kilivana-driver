@@ -140,6 +140,9 @@ class JobsViewModel(
     }
 
     fun acceptJob(jobId: String) {
+        val job = _uiState.value.jobs.firstOrNull { it.id == jobId } ?: return
+        if (job.distanceKm <= 0.0) return
+
         val driverId = SessionStore.userId ?: return
         val numericId = jobId.toLongOrNull() ?: run {
             // Sample/non-numeric ID: fall back to local-only update
@@ -228,7 +231,7 @@ internal fun sampleJobs(): List<Job> = listOf(
         dropoffLocation = "Nairobi, Nairobi", dropoffPlace = "Wakulima Market", dropoffTime = "Today 12:30 PM",
         dropoffLat = -1.2921, dropoffLon = 36.8219,
         cargo = "Vegetables (Mixed)", quantity = "1,000 kg",
-        distanceKm = 45, estimatedTime = "1h 20m", payoutKsh = 2500,
+        distanceKm = 45.0, estimatedTime = "1h 20m", payoutKsh = 2500,
         customer = "Greenfield Farm Ltd", deliveryOtp = "4821",
         status = JobStatus.AVAILABLE, isNew = true
     ),
@@ -239,7 +242,7 @@ internal fun sampleJobs(): List<Job> = listOf(
         dropoffLocation = "Nakuru, Nakuru", dropoffPlace = "Nakuru Dairy Hub", dropoffTime = "Today 4:40 PM",
         dropoffLat = -0.3031, dropoffLon = 36.0800,
         cargo = "Fresh Milk", quantity = "500 L",
-        distanceKm = 205, estimatedTime = "3h 40m", payoutKsh = 3200,
+        distanceKm = 205.0, estimatedTime = "3h 40m", payoutKsh = 3200,
         customer = "Mwea Dairy Co-op", deliveryOtp = "7734",
         status = JobStatus.AVAILABLE, isNew = true
     ),
@@ -250,7 +253,7 @@ internal fun sampleJobs(): List<Job> = listOf(
         dropoffLocation = "Kisumu, Kisumu", dropoffPlace = "Kisumu Grain Depot", dropoffTime = "Tomorrow 1:45 PM",
         dropoffLat = -0.0917, dropoffLon = 34.7680,
         cargo = "Dry Maize", quantity = "2,000 kg",
-        distanceKm = 390, estimatedTime = "7h 45m", payoutKsh = 8500,
+        distanceKm = 390.0, estimatedTime = "7h 45m", payoutKsh = 8500,
         customer = "Machakos Growers Ltd", deliveryOtp = "1029",
         status = JobStatus.AVAILABLE
     ),
@@ -261,7 +264,7 @@ internal fun sampleJobs(): List<Job> = listOf(
         dropoffLocation = "Nairobi, Nairobi", dropoffPlace = "City Market", dropoffTime = "Yesterday 10:00 AM",
         dropoffLat = -1.2921, dropoffLon = 36.8219,
         cargo = "Tomatoes", quantity = "800 kg",
-        distanceKm = 32, estimatedTime = "55m", payoutKsh = 1900,
+        distanceKm = 32.0, estimatedTime = "55m", payoutKsh = 1900,
         customer = "Kiambu Fresh Farms", deliveryOtp = "3390",
         status = JobStatus.COMPLETED
     ),
@@ -272,7 +275,7 @@ internal fun sampleJobs(): List<Job> = listOf(
         dropoffLocation = "Nairobi, Nairobi", dropoffPlace = "Wakulima Market", dropoffTime = "Mon 11:00 AM",
         dropoffLat = -1.2921, dropoffLon = 36.8219,
         cargo = "Potatoes", quantity = "1,500 kg",
-        distanceKm = 155, estimatedTime = "3h 10m", payoutKsh = 4200,
+        distanceKm = 155.0, estimatedTime = "3h 10m", payoutKsh = 4200,
         customer = "Highlands Growers", deliveryOtp = "5567",
         status = JobStatus.COMPLETED
     ),
@@ -283,7 +286,7 @@ internal fun sampleJobs(): List<Job> = listOf(
         dropoffLocation = "Mombasa, Mombasa", dropoffPlace = "Mombasa Cargo Terminal", dropoffTime = "Sun 3:30 PM",
         dropoffLat = -4.0435, dropoffLon = 39.6682,
         cargo = "Cut Flowers", quantity = "300 kg",
-        distanceKm = 480, estimatedTime = "9h 30m", payoutKsh = 9800,
+        distanceKm = 480.0, estimatedTime = "9h 30m", payoutKsh = 9800,
         customer = "Naivasha Blooms Ltd", deliveryOtp = "8843",
         status = JobStatus.COMPLETED
     ),
@@ -294,7 +297,7 @@ internal fun sampleJobs(): List<Job> = listOf(
         dropoffLocation = "Nairobi, Nairobi", dropoffPlace = "Marikiti Market", dropoffTime = "Sat 11:15 AM",
         dropoffLat = -1.2921, dropoffLon = 36.8219,
         cargo = "Bananas", quantity = "1,200 kg",
-        distanceKm = 125, estimatedTime = "3h 15m", payoutKsh = 3600,
+        distanceKm = 125.0, estimatedTime = "3h 15m", payoutKsh = 3600,
         customer = "Embu Farmers Co-op", deliveryOtp = "2214",
         status = JobStatus.COMPLETED
     ),
@@ -305,7 +308,7 @@ internal fun sampleJobs(): List<Job> = listOf(
         dropoffLocation = "Nairobi, Nairobi", dropoffPlace = "Nairobi Milk Depot", dropoffTime = "Fri 7:45 AM",
         dropoffLat = -1.2921, dropoffLon = 36.8219,
         cargo = "Fresh Milk", quantity = "400 L",
-        distanceKm = 28, estimatedTime = "1h 15m", payoutKsh = 1500,
+        distanceKm = 28.0, estimatedTime = "1h 15m", payoutKsh = 1500,
         customer = "Limuru Dairy Ltd", deliveryOtp = "9081",
         status = JobStatus.COMPLETED
     )

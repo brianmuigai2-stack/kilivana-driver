@@ -85,7 +85,7 @@ data class DeliveryJob(
         dropoffLon = destinationLongitude,
         cargo = cargoDescription ?: "",
         quantity = if (quantity != null && quantity > 0) "$quantity kg" else "",
-        distanceKm = distanceKm.roundToInt(),
+        distanceKm = distanceKm,
         estimatedTime = formatMinutes(estimatedMinutes),
         payoutKsh = payoutAmount.toInt(),
         customer = "",
@@ -133,7 +133,4 @@ data class DeliveryJob(
             else -> "${m}m"
         }
     }
-
-    /** Truncates this value to an integer for the displayed distance. */
-    private fun Double.roundToInt(): Int = this.toInt()
 }

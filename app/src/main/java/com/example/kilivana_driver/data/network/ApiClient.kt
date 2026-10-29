@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit
  */
 object ApiClient {
 
-    const val BASE_URL = "https://either-juvenile-progeny.ngrok-free.dev/"
+    const val BASE_URL = "https://hankering-morphing-outclass.ngrok-free.dev/"
     const val FALLBACK_BASE_URL = "https://kilivana-backend-a44w.onrender.com/"
     const val LOCAL_BASE_URL = "http://10.0.2.2:8080/"
     const val LAN_BASE_URL = "http://192.168.137.112:8080/"
