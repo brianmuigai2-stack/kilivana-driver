@@ -144,7 +144,7 @@ fun JobRouteScreen(
         ActivityResultContracts.TakePicturePreview()
     ) { bitmap ->
         if (bitmap != null) {
-            val file = context.cacheDir.resolve("delivery-evidence-${job.id}.jpg")
+            val file = context.cacheDir.resolve("delivery-evidence-${job.id}-${System.currentTimeMillis()}.jpg")
             file.outputStream().use { output -> bitmap.compress(Bitmap.CompressFormat.JPEG, 88, output) }
             evidencePhotoUri = Uri.fromFile(file)
         }
@@ -808,7 +808,7 @@ private fun DeliveryProofDialog(
     onDismiss: () -> Unit
 ) {
     var recipientName by remember { mutableStateOf("") }
-    val hasEvidence = photoUri != null
+    val hasEvidence = photoUri != null && photoUri.scheme !in setOf("content", "file")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -819,6 +819,12 @@ private fun DeliveryProofDialog(
                     text = "The delivery code will be checked when you submit the proof.",
                     color = KilivanaTextMuted,
                     fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Photo uploads are not available yet. You can preview a selected photo, but proof cannot be submitted until uploads are supported.",
+                    color = KilivanaTextMuted,
+                    fontSize = 12.sp
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 OutlinedTextField(

@@ -105,6 +105,22 @@ class JobsViewModel(
                 return@launch
             }
             val result = jobsRepository.getJobsByDriver(driverId)
+            val signedInDriver = SessionStore.currentUser.value
+                ?.takeIf { it.role.equals(DRIVER_ROLE, ignoreCase = true) }
+            if (signedInDriver?.id != driverId) {
+                currentUserId = signedInDriver?.id
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        jobs = emptyList(),
+                        errorMessage = null,
+                        errorType = null
+                    )
+                }
+                if (signedInDriver != null) refresh()
+                return@launch
+            }
+
             if (result.isSuccess) {
                 val jobs = result.getOrNull().orEmpty()
                     // Admin assignment is required before a driver can accept or reject a job.
