@@ -177,9 +177,9 @@ class ProfileRepository(
     }
 
     /**
-     * Ensures every image URL is absolute and reachable. Prepends the active base URL
+     * Ensures every image URL is absolute and reachable. Prepends the active backend URL
      * for relative paths or converts local host addresses (localhost, 127.0.0.1, 10.0.2.2)
-     * returned by the server to the app's base backend URL.
+     * returned by the server to the backend host selected by API failover.
      */
     private fun resolveUrl(url: String): String {
         if (url.isBlank()) return ""
@@ -187,15 +187,17 @@ class ProfileRepository(
         if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
             val uri = runCatching { java.net.URI(trimmed) }.getOrNull()
             val host = uri?.host?.lowercase()
-            if (host == "localhost" || host == "127.0.0.1" || host == "10.0.2.2") {
-                val path = uri.rawPath.orEmpty()
-                val formattedPath = if (path.startsWith("/")) path else "/$path"
-                return "${ApiClient.BASE_URL.trimEnd('/')}$formattedPath"
+            val lanHost = runCatching { java.net.URI(ApiClient.LAN_BASE_URL).host }.getOrNull()
+            if (host == "localhost" || host == "127.0.0.1" || host == "10.0.2.2" ||
+                host == "0.0.0.0" || host == lanHost
+            ) {
+                val pathAndQuery = uri?.rawPath.orEmpty() +
+                    uri?.rawQuery?.let { "?$it" }.orEmpty()
+                return ApiClient.backendUrlFor(pathAndQuery)
             }
             return trimmed
         }
-        val formattedPath = if (trimmed.startsWith("/")) trimmed else "/$trimmed"
-        return "${ApiClient.BASE_URL.trimEnd('/')}$formattedPath"
+        return ApiClient.backendUrlFor(trimmed)
     }
 
     private fun ApiResponse<List<DriverImage>>.mapImages(): ApiResponse<List<DriverImage>> =

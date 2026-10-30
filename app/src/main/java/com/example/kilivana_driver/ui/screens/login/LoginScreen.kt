@@ -87,9 +87,15 @@ fun LoginScreen(
     onRememberMeChange: (Boolean) -> Unit,
     onLoginClick: () -> Unit,
     onForgotPassword: () -> Unit,
+    onOpenResetPassword: () -> Unit,
     onForgotPasswordEmailChange: (String) -> Unit,
     onForgotPasswordSubmit: () -> Unit,
     onForgotPasswordDismiss: () -> Unit,
+    onResetTokenChange: (String) -> Unit,
+    onNewPasswordChange: (String) -> Unit,
+    onConfirmNewPasswordChange: (String) -> Unit,
+    onResetPasswordSubmit: () -> Unit,
+    onResetPasswordDismiss: () -> Unit,
     onContactSupport: () -> Unit,
     onInspectorLoginClick: () -> Unit
 ) {
@@ -448,6 +454,12 @@ fun LoginScreen(
                 Column {
                     Text("Enter the email address associated with your driver account.")
                     Spacer(modifier = Modifier.height(12.dp))
+                    TextButton(
+                        onClick = onOpenResetPassword,
+                        contentPadding = PaddingValues(horizontal = 0.dp)
+                    ) {
+                        Text("I already have a recovery token")
+                    }
                     OutlinedTextField(
                         value = uiState.forgotPasswordEmail,
                         onValueChange = onForgotPasswordEmailChange,
@@ -508,6 +520,21 @@ fun LoginScreen(
             }
         )
     }
+
+    com.example.kilivana_driver.ui.components.ResetPasswordDialog(
+        visible = uiState.isResetPasswordDialogVisible,
+        token = uiState.resetToken,
+        newPassword = uiState.newPassword,
+        confirmPassword = uiState.confirmNewPassword,
+        isLoading = uiState.isResetPasswordLoading,
+        message = uiState.resetPasswordMessage,
+        error = uiState.resetPasswordError,
+        onTokenChange = onResetTokenChange,
+        onNewPasswordChange = onNewPasswordChange,
+        onConfirmPasswordChange = onConfirmNewPasswordChange,
+        onSubmit = onResetPasswordSubmit,
+        onDismiss = onResetPasswordDismiss
+    )
 
 }
 
@@ -631,9 +658,15 @@ private fun LoginScreenPreview() {
             onRememberMeChange = {},
             onLoginClick = {},
             onForgotPassword = {},
+            onOpenResetPassword = {},
             onForgotPasswordEmailChange = {},
             onForgotPasswordSubmit = {},
             onForgotPasswordDismiss = {},
+            onResetTokenChange = {},
+            onNewPasswordChange = {},
+            onConfirmNewPasswordChange = {},
+            onResetPasswordSubmit = {},
+            onResetPasswordDismiss = {},
             onContactSupport = {},
             onInspectorLoginClick = {}
         )

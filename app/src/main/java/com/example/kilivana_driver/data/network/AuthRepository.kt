@@ -81,7 +81,10 @@ class AuthRepository(
 
         // Perform online token validation in the background
         CoroutineScope(Dispatchers.IO).launch {
-            when (val check = checkSession()) {
+            val check = checkSession()
+            if (SessionStore.currentUser.value?.id != restored.user.id) return@launch
+
+            when (check) {
                 is SessionCheck.Valid -> {
                     if (restoreAllowedRoles.any(check.user::isAllowedRole)) {
                         SessionStore.save(check.user, SessionStore.accessToken.value, SessionStore.refreshToken.value)

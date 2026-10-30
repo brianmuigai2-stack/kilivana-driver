@@ -38,6 +38,15 @@ object ApiClient {
     const val LOCAL_BASE_URL = "http://10.0.2.2:8080/"
     const val LAN_BASE_URL = "http://192.168.137.112:8080/"
 
+    @Volatile
+    private var preferredBackendBaseUrl: String? = null
+
+    fun backendUrlFor(path: String): String {
+        val baseUrl = (preferredBackendBaseUrl ?: BASE_URL).trimEnd('/')
+        val formattedPath = if (path.startsWith("/")) path else "/$path"
+        return "$baseUrl$formattedPath"
+    }
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -113,6 +122,10 @@ object ApiClient {
                     // a 401 — otherwise every later call would keep paying the
                     // dead tunnel's timeout first.
                     preferredHost = host
+                    preferredBackendBaseUrl = target.url.newBuilder()
+                        .encodedPath("/")
+                        .build()
+                        .toString()
                     return response
                 } catch (e: IOException) {
                     lastFailure = e
@@ -211,7 +224,7 @@ object ApiClient {
             .build()
     }
 
-    private val secretJsonFields = Regex("\"(password|accessToken|refreshToken)\"\\s*:\\s*\"[^\"]*\"")
+    private val secretJsonFields = Regex("\"(password|accessToken|refreshToken|token|newPassword)\"\\s*:\\s*\"[^\"]*\"")
 
     /** Replaces the value of password and token JSON fields with ***. */
     private fun redactSecrets(message: String): String =

@@ -267,9 +267,15 @@ class MainActivity : ComponentActivity() {
                             onRememberMeChange = loginViewModel::onRememberMeChange,
                             onLoginClick = loginViewModel::onLoginClick,
                             onForgotPassword = loginViewModel::onForgotPasswordClick,
+                            onOpenResetPassword = loginViewModel::onOpenResetPassword,
                             onForgotPasswordEmailChange = loginViewModel::onForgotPasswordEmailChange,
                             onForgotPasswordSubmit = loginViewModel::onForgotPasswordSubmit,
                             onForgotPasswordDismiss = loginViewModel::onForgotPasswordDismiss,
+                            onResetTokenChange = loginViewModel::onResetTokenChange,
+                            onNewPasswordChange = loginViewModel::onNewPasswordChange,
+                            onConfirmNewPasswordChange = loginViewModel::onConfirmNewPasswordChange,
+                            onResetPasswordSubmit = loginViewModel::onResetPasswordSubmit,
+                            onResetPasswordDismiss = loginViewModel::onResetPasswordDismiss,
                             onContactSupport = { /* TODO: open dialer or WhatsApp to dispatch */ },
                             onInspectorLoginClick = { showInspectorLogin = true }
                         )

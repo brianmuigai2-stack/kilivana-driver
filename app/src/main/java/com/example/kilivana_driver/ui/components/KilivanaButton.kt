@@ -10,11 +10,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
-import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
 /**
  * The app's full-width primary button, in Kilivana green.
@@ -39,15 +39,15 @@ fun KilivanaButton(
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = KilivanaGreenCard,
-            contentColor = KilivanaWhite,
+            contentColor = Color.White,
             disabledContainerColor = KilivanaGreenCard.copy(alpha = 0.6f),
-            disabledContentColor = KilivanaWhite
+            disabledContentColor = Color.White
         )
     ) {
         if (isLoading) {
             CircularProgressIndicator(
                 modifier = Modifier.size(22.dp),
-                color = KilivanaWhite,
+                color = Color.White,
                 strokeWidth = 2.dp
             )
         } else {
