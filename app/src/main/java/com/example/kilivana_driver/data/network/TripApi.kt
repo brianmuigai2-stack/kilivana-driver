@@ -1,12 +1,7 @@
 package com.example.kilivana_driver.data.network
 
 import com.example.kilivana_driver.data.model.ApiResponse
-import com.example.kilivana_driver.data.model.LocationUpdate
-import com.example.kilivana_driver.data.model.LocationUploadResponse
-import com.example.kilivana_driver.data.model.ReportLocationRequest
-import com.example.kilivana_driver.data.model.StopTrackingRequest
 import com.example.kilivana_driver.data.model.TripStatus
-import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -35,57 +30,6 @@ interface TripApi {
     suspend fun startTracking(
         @Path("tripId") tripId: String
     ): ApiResponse<Unit>
-
-    /**
-     * Stops tracking for a trip.
-     *
-     * Call this when the delivery is completed, cancelled, or the driver
-     * explicitly ends tracking.
-     *
-     * POST /api/v1/trips/{tripId}/tracking/stop
-     */
-    @POST("api/v1/trips/{tripId}/tracking/stop")
-    suspend fun stopTracking(
-        @Path("tripId") tripId: String,
-        @Body body: StopTrackingRequest
-    ): ApiResponse<Unit>
-
-    /**
-     * Sends a single GPS location update for the active trip.
-     *
-     * The driver app should call this periodically (configured by TrackingConfig)
-     * while a trip is in HEADING_TO_PICKUP or IN_TRANSIT stage.
-     *
-     * POST /api/v1/trips/{tripId}/location
-     */
-    @POST("api/v1/trips/{tripId}/location")
-    suspend fun uploadLocation(
-        @Path("tripId") tripId: String,
-        @Body body: LocationUpdate
-    ): ApiResponse<LocationUploadResponse>
-
-    /**
-     * Sends a batch of location updates (for offline queue flush).
-     *
-     * POST /api/v1/trips/{tripId}/location/batch
-     */
-    @POST("api/v1/trips/{tripId}/location/batch")
-    suspend fun uploadLocationBatch(
-        @Path("tripId") tripId: String,
-        @Body body: List<LocationUpdate>
-    ): ApiResponse<LocationUploadResponse>
-
-    /**
-     * Gets the current trip status including last known location.
-     *
-     * Used for initial sync when the app resumes or reconnects.
-     *
-     * GET /api/v1/trips/{tripId}/status
-     */
-    @GET("api/v1/trips/{tripId}/status")
-    suspend fun getTripStatus(
-        @Path("tripId") tripId: String
-    ): ApiResponse<TripStatus>
 
     /**
      * Gets the list of active trips for the current driver.

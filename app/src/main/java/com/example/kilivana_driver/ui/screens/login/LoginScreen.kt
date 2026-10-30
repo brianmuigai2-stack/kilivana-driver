@@ -443,7 +443,7 @@ fun LoginScreen(
     if (uiState.isForgotPasswordDialogVisible) {
         AlertDialog(
             onDismissRequest = onForgotPasswordDismiss,
-            title = { Text("Reset your password") },
+            title = { Text("Forgot password?") },
             text = {
                 Column {
                     Text("Enter the email address associated with your driver account.")
@@ -508,6 +508,7 @@ fun LoginScreen(
             }
         )
     }
+
 }
 
 // ================================================================

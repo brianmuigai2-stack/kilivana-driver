@@ -34,7 +34,8 @@ data class ApiError(
 )
 
 /**
- * One uploaded image from GET /api/v1/profiles/drivers/{userId}/images.
+ * One uploaded profile image. Driver and inspector image endpoints share this
+ * response shape.
  *
  * The backend hands back both `url` (what you display) and the storage
  * `publicId`/`assetId` pair, so all three are kept even though the UI only

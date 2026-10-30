@@ -32,6 +32,14 @@ interface ProofOfDeliveryApi {
         @Query("otp") otp: String? = null
     ): ApiResponse<ProofOfDelivery>
 
+    /** Files proof for a specific job; OTP is required until the job's code is verified. */
+    @POST("api/v1/logistics/jobs/{jobId}/proof-of-delivery")
+    suspend fun fileProofOfDeliveryForJob(
+        @Path("jobId") jobId: Long,
+        @Body body: ProofOfDelivery,
+        @Query("otp") otp: String? = null
+    ): ApiResponse<ProofOfDelivery>
+
     @DELETE("api/v1/logistics/proof-of-delivery/{id}")
     suspend fun deleteProofOfDelivery(
         @Path("id") id: Long

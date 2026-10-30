@@ -50,7 +50,10 @@ class ProfileRepository(
         callUnit { api.deleteDriverProfile(userId) }
 
     suspend fun getImages(userId: Long): Result<List<DriverImage>> =
-        call { api.getDriverImages(userId).mapImages() }
+        callList { api.getDriverImages(userId).mapImages() }
+
+    suspend fun getInspectorImages(userId: Long): Result<List<DriverImage>> =
+        callList { api.getInspectorImages(userId).mapImages() }
 
     /**
      * Uploads one image from a local file, e.g. a photo the driver picked, and
@@ -88,11 +91,62 @@ class ProfileRepository(
         }
     }
 
+    /**
+     * Uploads an inspector profile photo through the inspector-specific
+     * endpoint, never the driver's image collection.
+     */
+    suspend fun uploadInspectorImage(
+        userId: Long,
+        file: File,
+        isPrimary: Boolean? = null
+    ): Result<List<DriverImage>> = withContext(Dispatchers.IO) {
+        try {
+            val part = MultipartBody.Part.createFormData(
+                name = "image",
+                filename = file.name,
+                body = file.asRequestBody(mediaTypeFor(file))
+            )
+            val response = api.uploadInspectorImage(
+                userId = userId,
+                image = part,
+                isPrimary = isPrimary
+            ).mapImages()
+            if (response.success != false) {
+                Result.success(response.data.orEmpty())
+            } else {
+                Result.failure(Exception(describe(response.error, response.message)))
+            }
+        } catch (e: HttpException) {
+            Result.failure(Exception(readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteImage(userId: Long, imageId: Long): Result<Unit> =
         callUnit { api.deleteDriverImage(userId, imageId) }
 
+    suspend fun deleteInspectorImage(userId: Long, imageId: Long): Result<Unit> =
+        callUnit { api.deleteInspectorImage(userId, imageId) }
+
     private suspend fun <T> call(block: suspend () -> ApiResponse<T>): Result<T> =
         withContext(Dispatchers.IO) { runCatchingBody(block) }
+
+    private suspend fun <T> callList(block: suspend () -> ApiResponse<List<T>>): Result<List<T>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = block()
+                if (response.success != false) {
+                    Result.success(response.data.orEmpty())
+                } else {
+                    Result.failure(Exception(describe(response.error, response.message)))
+                }
+            } catch (e: HttpException) {
+                Result.failure(Exception(readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
 
     /** Runs a request on the IO dispatcher and reports success unless explicitly rejected, without requiring response data. */
     private suspend fun callUnit(block: suspend () -> ApiResponse<Unit>): Result<Unit> =
@@ -123,13 +177,25 @@ class ProfileRepository(
     }
 
     /**
-     * Ensures every image URL is absolute. The backend sometimes returns a
-     * relative path like "/uploads/foo.jpg" — prepend the base URL so Coil
-     * can actually load it.
+     * Ensures every image URL is absolute and reachable. Prepends the active base URL
+     * for relative paths or converts local host addresses (localhost, 127.0.0.1, 10.0.2.2)
+     * returned by the server to the app's base backend URL.
      */
     private fun resolveUrl(url: String): String {
-        val base = ApiClient.BASE_URL.trimEnd('/')
-        return if (url.startsWith("http")) url else "$base$url"
+        if (url.isBlank()) return ""
+        val trimmed = url.trim()
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            val uri = runCatching { java.net.URI(trimmed) }.getOrNull()
+            val host = uri?.host?.lowercase()
+            if (host == "localhost" || host == "127.0.0.1" || host == "10.0.2.2") {
+                val path = uri.rawPath.orEmpty()
+                val formattedPath = if (path.startsWith("/")) path else "/$path"
+                return "${ApiClient.BASE_URL.trimEnd('/')}$formattedPath"
+            }
+            return trimmed
+        }
+        val formattedPath = if (trimmed.startsWith("/")) trimmed else "/$trimmed"
+        return "${ApiClient.BASE_URL.trimEnd('/')}$formattedPath"
     }
 
     private fun ApiResponse<List<DriverImage>>.mapImages(): ApiResponse<List<DriverImage>> =

@@ -6,9 +6,8 @@ enum class DeliveryOutcome { COMPLETED, CANCELLED }
 /**
  * One row of the delivery history screen.
  *
- * Still sample data (see `sampleDeliveryHistory()`) — the API has no
- * history endpoint wired up yet. [dateLabel] and [earningsKsh] are
- * display-ready strings/values, not raw timestamps.
+ * Display-ready row derived from the signed-in driver's delivery jobs.
+ * [dateLabel] and [earningsKsh] are display values, not raw timestamps.
  */
 data class DeliveryRecord(
     val id: String,

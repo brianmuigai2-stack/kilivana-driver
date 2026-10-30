@@ -219,7 +219,7 @@ fun SettingsScreen(
             SettingsCard {
                 NavRow(
                     icon = Icons.Outlined.Lock,
-                    title = "Change Password",
+                    title = "Reset Password",
                     onClick = onChangePasswordClick
                 )
             }

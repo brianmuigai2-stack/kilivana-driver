@@ -43,7 +43,7 @@ class JobsViewModel(
     private val jobsRepository: JobsRepository = JobsRepository()
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(JobsUiState(isLoading = true))
+    private val _uiState = MutableStateFlow(JobsUiState())
     val uiState: StateFlow<JobsUiState> = _uiState.asStateFlow()
 
     /** Tracks the user id whose jobs are currently loaded, so a switch to a
@@ -99,9 +99,18 @@ class JobsViewModel(
         if (_uiState.value.isLoading) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val result = jobsRepository.getJobs()
+            val driverId = currentUserId ?: SessionStore.userId
+            if (driverId == null) {
+                _uiState.update { it.copy(isLoading = false, jobs = emptyList()) }
+                return@launch
+            }
+            val result = jobsRepository.getJobsByDriver(driverId)
             if (result.isSuccess) {
-                val jobs = result.getOrNull().orEmpty().map { it.toDomain() }
+                val jobs = result.getOrNull().orEmpty()
+                    // Admin assignment is required before a driver can accept or reject a job.
+                    .filterNot { it.status.equals("pending_assignment", ignoreCase = true) ||
+                        it.status.equals("unassigned", ignoreCase = true) }
+                    .map { it.toDomain() }
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -141,8 +150,6 @@ class JobsViewModel(
 
     fun acceptJob(jobId: String) {
         val job = _uiState.value.jobs.firstOrNull { it.id == jobId } ?: return
-        if (job.distanceKm <= 0.0) return
-
         val driverId = SessionStore.userId ?: return
         val numericId = jobId.toLongOrNull() ?: run {
             // Sample/non-numeric ID: fall back to local-only update

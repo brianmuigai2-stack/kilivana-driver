@@ -91,7 +91,8 @@ data class DeliveryJob(
         customer = "",
         deliveryOtp = "",
         status = mapStatus(status),
-        isNew = false
+        isNew = false,
+        updatedAt = updatedAt
     )
 
     /** Maps backend statuses to job tabs, defaulting unknown or absent statuses to available. */

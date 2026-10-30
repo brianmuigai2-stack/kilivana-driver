@@ -5,6 +5,7 @@ import com.example.kilivana_driver.data.model.AuthUser
 import com.example.kilivana_driver.data.model.LoginRequest
 import com.example.kilivana_driver.data.model.LoginResult
 import com.example.kilivana_driver.data.model.RefreshRequest
+import com.example.kilivana_driver.data.model.ResetPasswordRequest
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -26,6 +27,9 @@ interface AuthApi {
 
     @POST("api/v1/auth/forgot-password")
     suspend fun forgotPassword(@Query("email") email: String): ApiResponse<String>
+
+    @POST("api/v1/auth/reset-password")
+    suspend fun resetPassword(@Body body: ResetPasswordRequest): ApiResponse<String>
 
     @POST("api/v1/auth/refresh")
     suspend fun refresh(@Body body: RefreshRequest): ApiResponse<LoginResult>

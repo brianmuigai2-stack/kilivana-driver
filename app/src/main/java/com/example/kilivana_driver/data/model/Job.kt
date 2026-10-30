@@ -51,7 +51,8 @@ data class Job(
     val customer: String,
     val deliveryOtp: String,
     val status: JobStatus,
-    val isNew: Boolean = false
+    val isNew: Boolean = false,
+    val updatedAt: String = ""
 ) {
     val distanceLabel: String
         get() = if (distanceKm > 0.0) {

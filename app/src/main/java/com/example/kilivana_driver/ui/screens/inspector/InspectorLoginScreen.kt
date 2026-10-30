@@ -5,7 +5,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -68,6 +67,7 @@ import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
 import com.example.kilivana_driver.ui.components.LoginRoleSwitcher
 import com.example.kilivana_driver.ui.components.KilivanaTextField
 import com.example.kilivana_driver.ui.theme.KilivanaGreen
+import com.example.kilivana_driver.ui.theme.KilivanaGreenCard
 import com.example.kilivana_driver.ui.theme.KilivanaGreenDark
 import com.example.kilivana_driver.ui.theme.KilivanaError
 import com.example.kilivana_driver.ui.theme.KilivanaErrorTint
@@ -373,12 +373,12 @@ fun InspectorLoginScreen(
                 enabled = !uiState.isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
+                    .height(54.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = KilivanaGreen,
+                    containerColor = KilivanaGreenCard,
                     contentColor = Color.White,
-                    disabledContainerColor = KilivanaGreen.copy(alpha = 0.55f),
+                    disabledContainerColor = KilivanaGreenCard.copy(alpha = 0.6f),
                     disabledContentColor = Color.White.copy(alpha = 0.85f)
                 ),
                 contentPadding = PaddingValues(horizontal = 20.dp)
@@ -400,8 +400,6 @@ fun InspectorLoginScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
-
             Text(
                 text = "KILIVANA INSPECTOR",
                 modifier = Modifier.fillMaxWidth(),
@@ -417,7 +415,7 @@ fun InspectorLoginScreen(
     if (uiState.isForgotPasswordDialogVisible) {
         AlertDialog(
             onDismissRequest = onForgotPasswordDismiss,
-            title = { Text("Reset your password") },
+            title = { Text("Forgot password?") },
             text = {
                 Column {
                     Text("Enter the email address associated with your inspector account.")
@@ -475,6 +473,7 @@ fun InspectorLoginScreen(
             }
         )
     }
+
 }
 
 // ================================================================
@@ -501,9 +500,9 @@ private fun InspectorErrorBanner(message: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(KilivanaErrorTint)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(

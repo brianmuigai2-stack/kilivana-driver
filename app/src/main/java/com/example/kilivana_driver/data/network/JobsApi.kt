@@ -114,7 +114,7 @@ interface JobsApi {
     suspend fun fileProofOfDeliveryForJob(@Path("jobId") jobId: Long, @Body body: ProofOfDelivery, @Query("otp") otp: String? = null): ApiResponse<ProofOfDelivery>
 
     @POST("api/v1/logistics/jobs/{id}/otp/verify")
-    suspend fun verifyOtp(@Path("id") id: Long, @Query("code") code: String): ApiResponse<DeliveryJob>
+    suspend fun verifyOtp(@Path("id") id: Long, @Query("otp") otp: String): ApiResponse<DeliveryJob>
 
     @PUT("api/v1/logistics/jobs/{id}/assign")
     suspend fun assignJobPut(@Path("id") id: Long, @Query("driverId") driverId: Long): ApiResponse<DeliveryJob>

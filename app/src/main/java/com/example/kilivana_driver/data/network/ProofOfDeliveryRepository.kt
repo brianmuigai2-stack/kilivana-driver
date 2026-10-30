@@ -42,7 +42,9 @@ class ProofOfDeliveryRepository(
     suspend fun file(
         proof: ProofOfDelivery,
         otp: String? = null
-    ): Result<ProofOfDelivery> = call { api.fileProofOfDelivery(proof, otp) }
+    ): Result<ProofOfDelivery> = call {
+        api.fileProofOfDeliveryForJob(proof.logisticsJobId, proof, otp)
+    }
 
     suspend fun delete(id: Long): Result<Unit> = withContext(Dispatchers.IO) {
         try {
