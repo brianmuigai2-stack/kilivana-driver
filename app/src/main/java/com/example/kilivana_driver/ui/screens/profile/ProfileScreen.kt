@@ -206,7 +206,8 @@ fun ProfileScreen(
                 RowDivider()
                 SettingsRow(
                     icon = Icons.Outlined.Lock,
-                    title = "Change Password",
+                    title = "Reset Password",
+                    subtitle = "Use the token from your recovery email",
                     onClick = onChangePasswordClick
                 )
                 RowDivider()

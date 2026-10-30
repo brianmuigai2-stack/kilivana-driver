@@ -29,7 +29,14 @@ data class LoginUiState(
     val forgotPasswordEmail: String = "",
     val isForgotPasswordLoading: Boolean = false,
     val forgotPasswordMessage: String? = null,
-    val forgotPasswordError: String? = null
+    val forgotPasswordError: String? = null,
+    val isResetPasswordDialogVisible: Boolean = false,
+    val resetToken: String = "",
+    val newPassword: String = "",
+    val confirmNewPassword: String = "",
+    val isResetPasswordLoading: Boolean = false,
+    val resetPasswordMessage: String? = null,
+    val resetPasswordError: String? = null
 )
 
 class LoginViewModel(application: Application) : AndroidViewModel(application) {
@@ -144,6 +151,87 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                         it.copy(
                             isForgotPasswordLoading = false,
                             forgotPasswordError = error.message ?: "Couldn't reach the backend"
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    fun onOpenResetPassword() {
+        _uiState.update {
+            it.copy(
+                isForgotPasswordDialogVisible = false,
+                isResetPasswordDialogVisible = true,
+                resetToken = "",
+                newPassword = "",
+                confirmNewPassword = "",
+                resetPasswordMessage = null,
+                resetPasswordError = null
+            )
+        }
+    }
+
+    fun onResetTokenChange(value: String) {
+        _uiState.update { it.copy(resetToken = value, resetPasswordError = null) }
+    }
+
+    fun onNewPasswordChange(value: String) {
+        _uiState.update { it.copy(newPassword = value, resetPasswordError = null) }
+    }
+
+    fun onConfirmNewPasswordChange(value: String) {
+        _uiState.update { it.copy(confirmNewPassword = value, resetPasswordError = null) }
+    }
+
+    fun onResetPasswordDismiss() {
+        if (!_uiState.value.isResetPasswordLoading) {
+            _uiState.update {
+                it.copy(
+                    isResetPasswordDialogVisible = false,
+                    resetPasswordMessage = null,
+                    resetPasswordError = null,
+                    resetToken = "",
+                    newPassword = "",
+                    confirmNewPassword = ""
+                )
+            }
+        }
+    }
+
+    fun onResetPasswordSubmit() {
+        val state = _uiState.value
+        if (state.isResetPasswordLoading || state.resetPasswordMessage != null) return
+        val validationError = when {
+            state.resetToken.isBlank() -> "Enter the reset token from your email."
+            state.newPassword.length < 8 -> "Use a password with at least 8 characters."
+            state.newPassword != state.confirmNewPassword -> "The passwords do not match."
+            else -> null
+        }
+        if (validationError != null) {
+            _uiState.update { it.copy(resetPasswordError = validationError) }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(isResetPasswordLoading = true, resetPasswordError = null)
+            }
+            val result = authRepository.resetPassword(state.resetToken, state.newPassword)
+            _uiState.update {
+                result.fold(
+                    onSuccess = { message ->
+                        it.copy(
+                            isResetPasswordLoading = false,
+                            resetPasswordMessage = message,
+                            newPassword = "",
+                            confirmNewPassword = ""
+                        )
+                    },
+                    onFailure = { error ->
+                        it.copy(
+                            isResetPasswordLoading = false,
+                            resetPasswordError = error.message ?: "Couldn't reach the backend"
                         )
                     }
                 )

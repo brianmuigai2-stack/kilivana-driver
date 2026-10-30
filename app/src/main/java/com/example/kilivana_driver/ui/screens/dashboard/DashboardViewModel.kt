@@ -56,16 +56,17 @@ class DashboardViewModel(
                 // reaches this ViewModel because it is created at activity
                 // launch, but their role must not trigger driver-only calls.
                 if (user != null && user.role.equals(DRIVER_ROLE, ignoreCase = true)) {
-                    refreshJobs()
+                    refreshJobs(user.id)
                 }
             }
         }
     }
 
     /** Fetches the driver's jobs from the backend and derives the dashboard metrics. */
-    fun refreshJobs() {
+    fun refreshJobs(driverId: Long? = SessionStore.userId) {
+        val id = driverId ?: return
         viewModelScope.launch {
-            val result = jobsRepository.getJobs()
+            val result = jobsRepository.getJobsByDriver(id)
             if (result.isSuccess) {
                 val deliveryJobs = result.getOrNull().orEmpty()
                 val acceptedJobs = deliveryJobs.filter { it.isAccepted() }

@@ -5,7 +5,6 @@ import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.JobStatus
 import com.example.kilivana_driver.data.model.LocationUpdate
-import com.example.kilivana_driver.data.model.StopTrackingRequest
 import com.example.kilivana_driver.data.model.TrackingConfig
 import com.example.kilivana_driver.data.model.TripStage
 import com.example.kilivana_driver.data.model.TripStatus
@@ -128,45 +127,17 @@ class TripRepository(
      * @return true if the backend acknowledged the stop.
      */
     suspend fun stopTracking(reason: String): Boolean = withContext(ioDispatcher) {
-        val tripId = _activeTripId.value ?: run {
-            _isBusy.value = false
-            return@withContext true // Nothing to stop
-        }
-        val userId = SessionStore.userId ?: run {
-            _lastError.value = "Not signed in"
-            _isBusy.value = false
-            return@withContext false
-        }
-
         _isBusy.value = true
         _lastError.value = null
-
-        val request = StopTrackingRequest(tripId = tripId, driverId = userId, reason = reason)
-        try {
-            val response = api.stopTracking(tripId, request)
-            val success = response.success != false
-            if (success) {
-                _tripStage.value = when (reason) {
-                    "COMPLETED" -> TripStage.DELIVERED
-                    "CANCELLED" -> TripStage.CANCELLED
-                    else -> TripStage.CANCELLED
-                }
-                _activeTripId.value = null
-                locationRepository.clearQueue()
-            } else {
-                _lastError.value = describe(response.error, response.message)
-            }
-            _isBusy.value = false
-            return@withContext success
-        } catch (e: HttpException) {
-            _lastError.value = readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"
-            _isBusy.value = false
-            return@withContext false
-        } catch (e: Exception) {
-            _lastError.value = e.message ?: "Couldn't reach the backend"
-            _isBusy.value = false
-            return@withContext false
-        }
+        // The supplied API contract exposes trip tracking start and active-trip
+        // lookup, but no stop endpoint. Job status is updated through the
+        // logistics API before this local tracking state is cleared.
+        _tripStage.value = if (reason == "COMPLETED") TripStage.DELIVERED else TripStage.CANCELLED
+        _activeTripId.value = null
+        _backendStatus.value = null
+        locationRepository.clearQueue()
+        _isBusy.value = false
+        true
     }
 
     /**
@@ -176,33 +147,7 @@ class TripRepository(
      * push indicates a status change.
      */
     suspend fun syncStatus(): TripStatus? = withContext(ioDispatcher) {
-        val tripId = _activeTripId.value ?: return@withContext null
-        try {
-            val response = api.getTripStatus(tripId)
-            if (response.success != false && response.data != null) {
-                _backendStatus.value = response.data
-                // Update local stage from backend status if it differs.
-                updateStageFromBackend(response.data!!)
-                return@withContext response.data
-            } else {
-                _lastError.value = describe(response.error, response.message)
-                return@withContext null
-            }
-        } catch (e: HttpException) {
-            // 404 might mean the trip was completed/cancelled on the backend.
-            if (e.code() == 404) {
-                _activeTripId.value = null
-                _tripStage.value = null
-                _backendStatus.value = null
-                locationRepository.clearQueue()
-            } else {
-                _lastError.value = readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"
-            }
-            return@withContext null
-        } catch (e: Exception) {
-            _lastError.value = e.message ?: "Couldn't reach the backend"
-            return@withContext null
-        }
+        checkForActiveTrip()
     }
 
     /**

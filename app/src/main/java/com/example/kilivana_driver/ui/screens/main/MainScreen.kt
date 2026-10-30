@@ -16,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.kilivana_driver.data.model.Driver
+import com.example.kilivana_driver.data.model.DeliveryOutcome
+import com.example.kilivana_driver.data.model.DeliveryRecord
 import com.example.kilivana_driver.data.model.JobStatus
 import com.example.kilivana_driver.tracking.LocationTrackingService
 import com.example.kilivana_driver.ui.components.BottomTab
@@ -23,7 +25,6 @@ import com.example.kilivana_driver.ui.components.KilivanaBottomBar
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardScreen
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardUiState
 import com.example.kilivana_driver.ui.screens.history.DeliveryHistoryScreen
-import com.example.kilivana_driver.ui.screens.history.sampleDeliveryHistory
 import com.example.kilivana_driver.ui.screens.jobs.JobDetailsScreen
 import com.example.kilivana_driver.ui.screens.jobs.JobRouteScreen
 import com.example.kilivana_driver.ui.screens.jobs.JobsScreen
@@ -41,6 +42,12 @@ import com.example.kilivana_driver.ui.screens.settings.AppLanguage
 import com.example.kilivana_driver.ui.screens.settings.SettingsScreen
 import com.example.kilivana_driver.ui.screens.settings.SettingsUiState
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
+import com.example.kilivana_driver.ui.screens.login.LoginUiState
+import com.example.kilivana_driver.ui.components.ResetPasswordDialog
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** Hosts the main tabs and detail screens, routing navigation and feature actions through the supplied callbacks. */
 @Composable
@@ -50,10 +57,16 @@ fun MainScreen(
     driver: Driver,
     settingsState: SettingsUiState,
     notificationsState: NotificationsUiState,
+    passwordResetState: LoginUiState = LoginUiState(),
+    onOpenResetPassword: () -> Unit = {},
+    onResetTokenChange: (String) -> Unit = {},
+    onNewPasswordChange: (String) -> Unit = {},
+    onConfirmNewPasswordChange: (String) -> Unit = {},
+    onResetPasswordSubmit: () -> Unit = {},
+    onResetPasswordDismiss: () -> Unit = {},
     onJobStatusSelected: (JobStatus) -> Unit,
     onAcceptJob: (String) -> Unit,
     onDeclineJob: (String) -> Unit,
-    onCompleteJob: (String) -> Unit,
     onRefreshJobs: () -> Unit,
     onPushNotificationsChange: (Boolean) -> Unit,
     onNotificationSoundChange: (Boolean) -> Unit,
@@ -84,8 +97,22 @@ fun MainScreen(
     var showProfileImages by rememberSaveable { mutableStateOf(false) }
     var tabBeforeHistory by rememberSaveable { mutableStateOf(BottomTab.HOME) }
 
-    // TODO: replace with real delivery history from a ViewModel / the API
-    val historyRecords = remember { sampleDeliveryHistory() }
+    LaunchedEffect(showHistory) {
+        if (showHistory) onRefreshJobs()
+    }
+    val historyRecords = jobsState.jobs
+        .filter { it.status == JobStatus.COMPLETED || it.status == JobStatus.CANCELLED }
+        .map { job ->
+            DeliveryRecord(
+                id = job.id,
+                cargo = job.cargo,
+                dateLabel = formatHistoryDate(job.updatedAt).ifBlank {
+                    job.dropoffTime.ifBlank { "Date unavailable" }
+                },
+                earningsKsh = if (job.status == JobStatus.COMPLETED) job.payoutKsh else 0,
+                outcome = if (job.status == JobStatus.COMPLETED) DeliveryOutcome.COMPLETED else DeliveryOutcome.CANCELLED
+            )
+        }
 
     val selectedJob = selectedJobId?.let { id -> jobsState.jobs.firstOrNull { it.id == id } }
     val activeTripJob = activeTripJobId?.let { id -> jobsState.jobs.firstOrNull { it.id == id } }
@@ -163,8 +190,8 @@ fun MainScreen(
             job = activeTripJob,
             onBack = { activeTripJobId = null },
             onDeliveryComplete = {
-                onCompleteJob(activeTripJob.id)
                 activeTripJobId = null
+                onRefreshJobs()
             }
         )
 
@@ -175,7 +202,7 @@ fun MainScreen(
             onNotificationSoundChange = onNotificationSoundChange,
             onDarkModeChange = onDarkModeChange,
             onLanguageSelected = onLanguageSelected,
-            onChangePasswordClick = { /* TODO */ },
+            onChangePasswordClick = onOpenResetPassword,
             onTermsClick = { /* TODO */ },
             onPrivacyClick = { /* TODO */ },
             onAboutClick = { /* TODO */ },
@@ -196,12 +223,9 @@ fun MainScreen(
             onBack = { selectedJobId = null },
             onAccept = {
                 onAcceptJob(selectedJob.id)
-                activeTripJobId = selectedJob.id
-                selectedJobId = null
             },
             onDecline = {
                 onDeclineJob(selectedJob.id)
-                selectedJobId = null
             },
             onStartTrip = {
                 activeTripJobId = selectedJob.id
@@ -271,7 +295,7 @@ fun MainScreen(
                             onPersonalInfoClick = { showPersonalInfo = true },
                             onVehicleDetailsClick = { showVehicleDetails = true },
                             onBankDetailsClick = { /* TODO */ },
-                            onChangePasswordClick = { /* TODO */ },
+                            onChangePasswordClick = onOpenResetPassword,
                             onNotificationsClick = { showNotifications = true },
                             onHelpClick = { /* TODO */ },
                             onLogout = onLogout
@@ -281,4 +305,25 @@ fun MainScreen(
             }
         }
     }
+
+    ResetPasswordDialog(
+        visible = passwordResetState.isResetPasswordDialogVisible,
+        token = passwordResetState.resetToken,
+        newPassword = passwordResetState.newPassword,
+        confirmPassword = passwordResetState.confirmNewPassword,
+        isLoading = passwordResetState.isResetPasswordLoading,
+        message = passwordResetState.resetPasswordMessage,
+        error = passwordResetState.resetPasswordError,
+        onTokenChange = onResetTokenChange,
+        onNewPasswordChange = onNewPasswordChange,
+        onConfirmPasswordChange = onConfirmNewPasswordChange,
+        onSubmit = onResetPasswordSubmit,
+        onDismiss = onResetPasswordDismiss
+    )
 }
+
+private fun formatHistoryDate(timestamp: String): String = runCatching {
+    Instant.parse(timestamp)
+        .atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault()))
+}.getOrDefault("")

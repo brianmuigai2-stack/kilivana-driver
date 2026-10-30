@@ -54,3 +54,10 @@ data class LoginResult(
 data class RefreshRequest(
     val refreshToken: String
 )
+
+/** Request body for POST /api/v1/auth/reset-password. */
+@Serializable
+data class ResetPasswordRequest(
+    val token: String,
+    val newPassword: String
+)

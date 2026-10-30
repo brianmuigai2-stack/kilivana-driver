@@ -4,10 +4,13 @@ import com.example.kilivana_driver.data.model.ApiError
 import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.AuthUser
 import com.example.kilivana_driver.data.model.LoginRequest
+import com.example.kilivana_driver.data.model.ResetPasswordRequest
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
@@ -42,62 +45,65 @@ class AuthRepository(
     val restoreComplete: StateFlow<Boolean> = _restoreComplete.asStateFlow()
 
     /**
-     * Re-signs the driver in from the stored session when they asked to be
-     * remembered, recovering the user from `/auth/me` rather than trusting the
-     * cached copy, so a revoked or expired session is caught at startup.
+     * Restores a remembered session instantly off disk so the app opens without
+     * stalling on the splash screen. Validates the session asynchronously against
+     * /auth/me in the background.
      */
-    suspend fun restoreSession(): Boolean {
+    suspend fun restoreSession(): Boolean = withContext(Dispatchers.IO) {
         val prefs = preferences ?: run {
             _restoreComplete.value = true
-            return false
+            return@withContext false
         }
         val restored = prefs.restore()
         if (restored == null) {
             _restoreComplete.value = true
-            return false
+            return@withContext false
         }
 
-        // Seed the token first so the /auth/me call is authenticated.
         val access = prefs.accessToken()
         val refresh = prefs.refreshToken()
         if (access.isNullOrBlank()) {
             prefs.clear()
             _restoreComplete.value = true
-            return false
+            return@withContext false
         }
-        SessionStore.save(restored.user, access, refresh)
 
-        return when (val check = checkSession()) {
-            is SessionCheck.Valid -> {
-                if (restoreAllowedRoles.any(check.user::isAllowedRole)) {
-                    SessionStore.save(check.user, SessionStore.accessToken.value, SessionStore.refreshToken.value)
-                    _restoreComplete.value = true
-                    true
-                } else {
+        if (!restoreAllowedRoles.any(restored.user::isAllowedRole)) {
+            SessionStore.clear()
+            prefs.clear()
+            _restoreComplete.value = true
+            return@withContext false
+        }
+
+        // Restore local session state immediately to dismiss splash screen without delay
+        SessionStore.save(restored.user, access, refresh)
+        _restoreComplete.value = true
+
+        // Perform online token validation in the background
+        CoroutineScope(Dispatchers.IO).launch {
+            when (val check = checkSession()) {
+                is SessionCheck.Valid -> {
+                    if (restoreAllowedRoles.any(check.user::isAllowedRole)) {
+                        SessionStore.save(check.user, SessionStore.accessToken.value, SessionStore.refreshToken.value)
+                        preferences.save(check.user, SessionStore.accessToken.value.orEmpty(), SessionStore.refreshToken.value.orEmpty())
+                    } else {
+                        SessionStore.clear()
+                        preferences.clear()
+                    }
+                }
+
+                SessionCheck.Rejected -> {
                     SessionStore.clear()
-                    prefs.clear()
-                    _restoreComplete.value = true
-                    false
+                    preferences.clear()
+                }
+
+                SessionCheck.Unreachable -> {
+                    // Server offline or tunnel restarting; keep cached session
                 }
             }
-
-            SessionCheck.Rejected -> {
-                // The server answered and said this session is no good (expired
-                // or revoked), so the driver must log in again.
-                SessionStore.clear()
-                prefs.clear()
-                _restoreComplete.value = true
-                false
-            }
-
-            SessionCheck.Unreachable -> {
-                // No signal or the server is down. That says nothing about the
-                // session, so keep the cached user and tokens and let the
-                // driver in; requests will work again once they are online.
-                _restoreComplete.value = true
-                true
-            }
         }
+
+        return@withContext true
     }
 
     /**
@@ -157,6 +163,28 @@ class AuthRepository(
                     val message = response.data?.takeIf { it.isNotBlank() }
                         ?: response.message.takeIf { it.isNotBlank() }
                         ?: "Password recovery request submitted."
+                    Result.success(message)
+                }
+            } catch (e: HttpException) {
+                Result.failure(Exception(readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    /** Consumes an email recovery token and sets the account's new password. */
+    suspend fun resetPassword(token: String, newPassword: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.resetPassword(
+                    ResetPasswordRequest(token = token.trim(), newPassword = newPassword)
+                )
+                if (response.success == false) {
+                    Result.failure(Exception(describe(response.error, response.message)))
+                } else {
+                    val message = response.data?.takeIf { it.isNotBlank() }
+                        ?: response.message.takeIf { it.isNotBlank() }
+                        ?: "Password updated. Sign in with your new password."
                     Result.success(message)
                 }
             } catch (e: HttpException) {

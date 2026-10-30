@@ -1,6 +1,7 @@
 package com.example.kilivana_driver.ui.screens.jobs
 
 import android.graphics.Bitmap
+import android.net.Uri
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.view.MotionEvent
@@ -55,6 +56,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.routing.RouteRepository
@@ -72,6 +76,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
+import coil.compose.AsyncImage
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.MapInitOptions
@@ -131,6 +136,19 @@ fun JobRouteScreen(
     val isSubmittingProof by tripViewModel.isSubmittingProof.collectAsStateWithLifecycle()
     val proofError by tripViewModel.proofError.collectAsStateWithLifecycle()
     val proofFiled by tripViewModel.proofFiled.collectAsStateWithLifecycle()
+    var evidencePhotoUri by remember(job.id) { mutableStateOf<Uri?>(null) }
+    val pickEvidencePhoto = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> if (uri != null) evidencePhotoUri = uri }
+    val takeEvidencePhoto = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            val file = context.cacheDir.resolve("delivery-evidence-${job.id}.jpg")
+            file.outputStream().use { output -> bitmap.compress(Bitmap.CompressFormat.JPEG, 88, output) }
+            evidencePhotoUri = Uri.fromFile(file)
+        }
+    }
 
     // Convert backend TripStage to UI stage
     val uiStage = remember { mutableStateOf(UiTripStage.HEADING_TO_PICKUP) }
@@ -575,11 +593,18 @@ fun JobRouteScreen(
         DeliveryProofDialog(
             isSubmitting = isSubmittingProof,
             error = proofError,
-            onSubmit = { recipientName, photoUrl, signatureUrl ->
+            photoUri = evidencePhotoUri,
+            onPickPhoto = {
+                pickEvidencePhoto.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            },
+            onTakePhoto = { takeEvidencePhoto.launch(null) },
+            onSubmit = { recipientName, signatureUrl ->
                 tripViewModel.fileDeliveryProof(
                     otp = deliveryOtp,
                     recipientName = recipientName,
-                    photoUrl = photoUrl,
+                    photoUrl = evidencePhotoUri?.toString().orEmpty(),
                     signatureUrl = signatureUrl
                 )
             },
@@ -776,13 +801,14 @@ private fun OtpDialog(
 private fun DeliveryProofDialog(
     isSubmitting: Boolean,
     error: String?,
-    onSubmit: (String, String, String) -> Unit,
+    photoUri: Uri?,
+    onPickPhoto: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onSubmit: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var recipientName by remember { mutableStateOf("") }
-    var photoUrl by remember { mutableStateOf("") }
-    var signatureUrl by remember { mutableStateOf("") }
-    val hasEvidence = photoUrl.isNotBlank() || signatureUrl.isNotBlank()
+    val hasEvidence = photoUri != null
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -802,20 +828,20 @@ private fun DeliveryProofDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = photoUrl,
-                    onValueChange = { photoUrl = it },
-                    label = { Text("Evidence photo URL") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = signatureUrl,
-                    onValueChange = { signatureUrl = it },
-                    label = { Text("Signature URL") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onTakePhoto) { Text("Take photo") }
+                    TextButton(onClick = onPickPhoto) { Text("Choose photo") }
+                }
+                if (photoUri != null) {
+                    AsyncImage(
+                        model = photoUri,
+                        contentDescription = "Selected delivery evidence photo",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                }
                 if (error != null) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(text = error, color = KilivanaNotificationRed, fontSize = 12.sp)
@@ -824,7 +850,7 @@ private fun DeliveryProofDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSubmit(recipientName, photoUrl, signatureUrl) },
+                onClick = { onSubmit(recipientName, "") },
                 enabled = !isSubmitting && hasEvidence
             ) {
                 Text(

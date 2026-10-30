@@ -248,8 +248,7 @@ fun JobDetailsScreen(
                     JobStatus.AVAILABLE -> {
                         KilivanaButton(
                             text = "Accept Job",
-                            onClick = onAccept,
-                            enabled = job.distanceKm > 0.0
+                            onClick = onAccept
                         )
                         OutlinedButton(
                             onClick = { showDeclineDialog = true },

@@ -83,6 +83,25 @@ class JobsRepository(
         }
     }
 
+    /** Lists only jobs assigned to the signed-in driver. */
+    suspend fun getJobsByDriver(driverId: Long): Result<List<DeliveryJob>> =
+        withContext(ioDispatcher) {
+            try {
+                val response = withTimeoutOrNull(API_TIMEOUT_MS) { api.getJobsByDriver(driverId) }
+                when {
+                    response == null -> Result.failure(
+                        JobsException(JobsErrorType.SERVER_DOWN, "Request timed out — check your connection")
+                    )
+                    response.success != false -> Result.success(response.data.orEmpty())
+                    else -> Result.failure(
+                        JobsException(JobsErrorType.OTHER, describe(response.error, response.message))
+                    )
+                }
+            } catch (e: Exception) {
+                Result.failure(classifyException(e))
+            }
+        }
+
     /**
      * Gets a single delivery job by ID.
      *

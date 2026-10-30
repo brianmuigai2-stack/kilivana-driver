@@ -74,6 +74,30 @@ interface ProfileApi {
         @Path("userId") userId: Long,
         @Path("imageId") imageId: Long
     ): ApiResponse<Unit>
+
+    @GET("api/v1/profiles/inspectors/{userId}/images")
+    suspend fun getInspectorImages(
+        @Path("userId") userId: Long
+    ): ApiResponse<List<DriverImage>>
+
+    /**
+     * Uploads to the inspector's own profile-image collection, separate from
+     * the driver's collection.
+     */
+    @Multipart
+    @POST("api/v1/profiles/inspectors/{userId}/images")
+    suspend fun uploadInspectorImage(
+        @Path("userId") userId: Long,
+        @Part image: MultipartBody.Part,
+        @Query("isPrimary") isPrimary: Boolean? = null
+    ): ApiResponse<List<DriverImage>>
+
+    @DELETE("api/v1/profiles/inspectors/{userId}/images/{imageId}")
+    suspend fun deleteInspectorImage(
+        @Path("userId") userId: Long,
+        @Path("imageId") imageId: Long
+    ): ApiResponse<Unit>
+
     @PUT("api/v1/profiles/drivers/{userId}/images/{imageId}/primary")
     suspend fun setPrimaryDriverImage(
         @Path("userId") userId: Long,

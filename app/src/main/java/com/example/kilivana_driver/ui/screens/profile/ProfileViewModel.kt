@@ -131,10 +131,11 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
             val profile = result.getOrThrow()
             val images = profileRepository.getImages(userId).getOrDefault(profile.images.orEmpty())
+            val profileWithImages = profile.copy(images = images)
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    profile = profile,
+                    profile = profileWithImages,
                     images = images,
                     needsProfile = false,
                     errorMessage = null
@@ -196,11 +197,13 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
             _uiState.update { state ->
                 val newImages = result.getOrNull() ?: state.images
+                val finalImages = if (result.isSuccess && previousPrimaryId != null) {
+                    newImages.filterNot { it.id == previousPrimaryId }
+                } else newImages
                 state.copy(
                     isUploading = false,
-                    images = if (result.isSuccess && previousPrimaryId != null) {
-                        newImages.filterNot { it.id == previousPrimaryId }
-                    } else newImages,
+                    profile = state.profile?.copy(images = finalImages),
+                    images = finalImages,
                     errorMessage = result.exceptionOrNull()?.message,
                     successMessage = if (result.isSuccess) "Photo uploaded" else null
                 )
@@ -217,12 +220,13 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                 it.copy(isDeletingImage = true, errorMessage = null, successMessage = null)
             }
             val result = profileRepository.deleteImage(userId, imageId)
-            _uiState.update {
-                it.copy(
+            _uiState.update { state ->
+                val finalImages = if (result.isSuccess) state.images.filterNot { i -> i.id == imageId }
+                else state.images
+                state.copy(
                     isDeletingImage = false,
-                    // Only drop it locally once the server confirms the delete.
-                    images = if (result.isSuccess) it.images.filterNot { i -> i.id == imageId }
-                    else it.images,
+                    profile = state.profile?.copy(images = finalImages),
+                    images = finalImages,
                     successMessage = if (result.isSuccess) "Photo removed" else null,
                     errorMessage = result.exceptionOrNull()?.message
                 )

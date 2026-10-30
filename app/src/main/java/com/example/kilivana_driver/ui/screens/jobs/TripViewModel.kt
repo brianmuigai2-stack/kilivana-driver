@@ -166,11 +166,12 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     fun startTrip() {
         _job?.let { job ->
             viewModelScope.launch {
-                tripRepository.startTracking(job)
-                // The route is fetched regardless of whether the backend tracking
-                // endpoint succeeded — Mapbox route lookup is a local operation that
-                // must not be blocked by a backend endpoint that may not be
-                // implemented yet (TripApi documents these as "should implement").
+                val started = tripRepository.startTracking(job)
+                if (!started) {
+                    _proofError.value = tripRepository.lastError.value ?: "Could not start delivery tracking."
+                }
+                // Route lookup is local and can still help the driver if tracking
+                // setup needs to be retried.
                 fetchRouteToTarget()
             }
         }
@@ -178,21 +179,21 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Advances to IN_TRANSIT stage (driver tapped "Mark as Picked Up"). */
     fun markPickedUp() {
-        tripRepository.advanceToInTransit()
-        _job?.let { job ->
+        val job = _job ?: return
+        val id = job.id.toLongOrNull() ?: return
+        viewModelScope.launch {
+            val result = jobsRepository.updateJobStatus(id, "picked_up")
+            if (result.isFailure) {
+                _proofError.value = result.exceptionOrNull()?.message ?: "Could not confirm pickup."
+                return@launch
+            }
+            tripRepository.advanceToInTransit()
             _targetGeoPoint = GeoPoint(job.dropoffLat, job.dropoffLon)
             _routePoints.value = null
             _usingEstimatedRoute.value = false
             _distanceLabel.value = "Finding route to buyer…"
             lastRouteFetchAtMs = 0L
             fetchRouteToTarget()
-        }
-    }
-
-    /** Completes the delivery (driver verified OTP). */
-    fun completeDelivery() {
-        viewModelScope.launch {
-            tripRepository.stopTracking("COMPLETED")
         }
     }
 
@@ -217,6 +218,10 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
             _proofError.value = "Add a photo or signature as delivery evidence."
             return
         }
+        if (photoUrl.startsWith("content://") || photoUrl.startsWith("file://")) {
+            _proofError.value = "The photo is selected, but the backend has no evidence image upload endpoint yet."
+            return
+        }
 
         viewModelScope.launch {
             _isSubmittingProof.value = true
@@ -231,8 +236,10 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
             _isSubmittingProof.value = false
             result.fold(
                 onSuccess = {
+                    // Filing proof validates the OTP and advances the job to
+                    // delivered on the backend. Only local tracking is ended here.
+                    tripRepository.stopTracking("COMPLETED")
                     _proofFiled.value = true
-                    completeDelivery()
                 },
                 onFailure = { error ->
                     _proofError.value = error.message ?: "Could not submit delivery proof."
@@ -244,7 +251,13 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     /** Cancels the trip. */
     fun cancelTrip() {
         viewModelScope.launch {
-            tripRepository.stopTracking("CANCELLED")
+            val id = _job?.id?.toLongOrNull() ?: return@launch
+            val cancelled = jobsRepository.cancelJob(id, "Driver cancelled the delivery")
+            if (cancelled.isSuccess) {
+                tripRepository.stopTracking("CANCELLED")
+            } else {
+                _proofError.value = cancelled.exceptionOrNull()?.message ?: "Could not cancel delivery."
+            }
         }
     }
 
@@ -385,7 +398,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         // Don't stop tracking here — the service continues in background.
-        // The screen calls completeDelivery() or cancelTrip() explicitly.
+        // Proof submission or cancellation ends the local trip state explicitly.
     }
 
     companion object {

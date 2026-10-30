@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -63,7 +62,7 @@ fun KilivanaHeader(
             .fillMaxWidth()
             .background(KilivanaGreenCard)
     ) {
-        HeaderMotif()
+        HeaderMotif(modifier = Modifier.matchParentSize())
 
         Row(
             modifier = Modifier
@@ -152,8 +151,8 @@ fun KilivanaHeader(
  * way because every stroke is white at low alpha.
  */
 @Composable
-private fun HeaderMotif() {
-    Canvas(modifier = Modifier.fillMaxSize()) {
+private fun HeaderMotif(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
         val center = Offset(size.width * 0.94f, size.height * 0.18f)
         val maxRadius = size.width * 0.62f
         val stroke = size.width * 0.012f
