@@ -25,7 +25,14 @@ data class LocationUpdate(
     val accuracy: Float? = null,
     /** Timestamp of the fix in UTC milliseconds since epoch. */
     val timestamp: Long = Instant.now().toEpochMilli()
-)
+) {
+    fun hasValidCoordinates(): Boolean =
+        latitude.isFinite() && longitude.isFinite() &&
+            latitude in -90.0..90.0 && longitude in -180.0..180.0
+
+    fun isEligibleForUpload(activeTripId: String?, trackingIsActive: Boolean): Boolean =
+        trackingIsActive && tripId.isNotBlank() && tripId == activeTripId && hasValidCoordinates()
+}
 
 /**
  * Configuration for the tracking service.

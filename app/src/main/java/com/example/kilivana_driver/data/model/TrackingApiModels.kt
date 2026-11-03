@@ -35,6 +35,20 @@ data class ReportLocationRequest(
 )
 
 /**
+ * Trip-path GPS payload. The trip ID is part of the URL, so this body reuses
+ * the existing location fields without duplicating an ID of a different type.
+ */
+@Serializable
+data class TripLocationRequest(
+    val latitude: Double,
+    val longitude: Double,
+    val speedKmh: Double? = null,
+    val bearing: Double? = null,
+    val accuracyMetres: Double? = null,
+    val clientTimestamp: String? = null
+)
+
+/**
  * Response data for location report.
  */
 @Serializable

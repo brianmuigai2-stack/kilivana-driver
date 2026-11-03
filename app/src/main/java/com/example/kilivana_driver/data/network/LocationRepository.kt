@@ -4,7 +4,7 @@ import com.example.kilivana_driver.data.model.ApiError
 import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.LocationUpdate
 import com.example.kilivana_driver.data.model.LocationUploadResponse
-import com.example.kilivana_driver.data.model.ReportLocationRequest
+import com.example.kilivana_driver.data.model.TripLocationRequest
 import com.example.kilivana_driver.data.model.TrackingConfig
 import com.example.kilivana_driver.data.model.UploadResult
 import kotlinx.coroutines.CoroutineDispatcher
@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * decide *when* to track — that's the TripViewModel/Service's job.
  */
 class LocationRepository(
-    private val api: TrackingApi = ApiClient.create(),
+    private val api: TripApi = ApiClient.create(),
     private val config: TrackingConfig = TrackingConfig.DEFAULT,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
@@ -69,8 +69,12 @@ class LocationRepository(
         val result = offlineQueue.trySend(update)
         if (!result.isSuccess) {
             // Queue full: drop the oldest to make room for the freshest location.
-            offlineQueue.tryReceive()
-            offlineQueue.trySend(update)
+            if (offlineQueue.tryReceive().isSuccess) {
+                queueSizeCounter.decrementAndGet()
+            }
+            if (offlineQueue.trySend(update).isSuccess) {
+                queueSizeCounter.incrementAndGet()
+            }
         } else {
             queueSizeCounter.incrementAndGet()
         }
@@ -88,13 +92,17 @@ class LocationRepository(
      */
     suspend fun uploadNow(update: LocationUpdate): UploadResult =
         withContext(ioDispatcher) {
-            val jobId = update.tripId.toLongOrNull() ?: return@withContext UploadResult.Failure(
-                Exception("Invalid trip ID: ${update.tripId}"),
+            if (update.tripId.isBlank()) return@withContext UploadResult.Failure(
+                Exception("Missing trip ID"),
                 false
             )
-            val request = update.toReportRequest()
+            if (!update.hasValidCoordinates()) return@withContext UploadResult.Failure(
+                Exception("GPS coordinates are outside valid latitude/longitude ranges"),
+                false
+            )
+            val request = update.toTripRequest()
             try {
-                val response = api.reportLocation(jobId, request)
+                val response = api.reportLocation(update.tripId, request)
                 if (response.success != false && response.data != null) {
                     UploadResult.Success(
                         LocationUploadResponse(
@@ -170,9 +178,10 @@ class LocationRepository(
 
     /** Clears the offline queue (e.g., when tracking ends or session expires). */
     fun clearQueue() {
-        while (offlineQueue.tryReceive() != null) {
+        while (offlineQueue.tryReceive().isSuccess) {
             queueSizeCounter.decrementAndGet()
         }
+        queueSizeCounter.set(0)
         _queueSize.value = 0
     }
 
@@ -204,13 +213,12 @@ class LocationRepository(
  * Converts the internal [LocationUpdate] model into the request body expected by
  * the backend's tracking endpoints (POST /api/v1/tracking/{jobId}/location).
  */
-private fun LocationUpdate.toReportRequest(): ReportLocationRequest =
-    ReportLocationRequest(
-        tripId = tripId.toLongOrNull(),
+private fun LocationUpdate.toTripRequest(): TripLocationRequest =
+    TripLocationRequest(
         latitude = latitude,
         longitude = longitude,
         speedKmh = speed?.let { it.toDouble() * 3.6 },
         bearing = bearing?.toDouble(),
         accuracyMetres = accuracy?.toDouble(),
-        clientTimestamp = java.time.Instant.now().toString()
+        clientTimestamp = java.time.Instant.ofEpochMilli(timestamp).toString()
     )

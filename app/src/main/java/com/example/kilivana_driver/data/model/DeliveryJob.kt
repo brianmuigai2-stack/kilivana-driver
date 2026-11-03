@@ -56,7 +56,8 @@ data class DeliveryJob(
     /** Null when the job has not been cancelled; present only on cancellations. */
     val cancellationReason: String? = null,
     val createdAt: String = "",
-    val updatedAt: String = ""
+    val updatedAt: String = "",
+    val tripId: String? = null
 ) {
     /**
      * Maps the backend job to the UI/domain [Job] model.
@@ -66,7 +67,7 @@ data class DeliveryJob(
      * - accepted / picked_up / in_transit → ACCEPTED
      * - completed / delivered → COMPLETED
      * - cancelled / rejected → CANCELLED
-     * - anything else → AVAILABLE (safe default; the UI filters by tab)
+     * - unrecognized or missing status → UNKNOWN, never actionable as AVAILABLE
      *
      * Nullable fields from the backend are coalesced to blank strings here
      * so the UI [Job] model stays non-nullable.
@@ -92,17 +93,23 @@ data class DeliveryJob(
         deliveryOtp = "",
         status = mapStatus(status),
         isNew = false,
-        updatedAt = updatedAt
+        updatedAt = updatedAt,
+        tripId = tripId
     )
 
-    /** Maps backend statuses to job tabs, defaulting unknown or absent statuses to available. */
-    private fun mapStatus(backendStatus: String?): JobStatus = when (backendStatus?.lowercase()) {
-        "pending_assignment", "available", "unassigned", "assigned" -> JobStatus.AVAILABLE
-        "accepted", "picked_up", "in_transit", "in_progress",
-        "en_route_to_buyer", "en_route_to_dropoff" -> JobStatus.ACCEPTED
-        "completed", "delivered" -> JobStatus.COMPLETED
-        "cancelled", "rejected", "canceled" -> JobStatus.CANCELLED
-        else -> JobStatus.AVAILABLE
+    /** Maps known backend states; unrecognized or absent states remain non-actionable. */
+    private fun mapStatus(backendStatus: String?): JobStatus = when (backendStatus?.trim()?.lowercase()) {
+        "pending_assignment", "pending", "new", "available", "unassigned", "assigned",
+        "waiting_for_driver", "driver_assigned" -> JobStatus.AVAILABLE
+
+        "accepted", "accepted_by_driver", "picked_up", "pickup_confirmed",
+        "in_transit", "in_progress", "en_route", "en_route_to_buyer",
+        "en_route_to_dropoff", "on_the_way", "traveling" -> JobStatus.ACCEPTED
+
+        "completed", "delivered", "finished", "success" -> JobStatus.COMPLETED
+        "cancelled", "rejected", "canceled", "failed", "declined" -> JobStatus.CANCELLED
+
+        else -> JobStatus.UNKNOWN
     }
 
     /** Formats an ISO instant in the device time zone; returns blank for missing input or the original on parse failure. */

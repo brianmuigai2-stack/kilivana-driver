@@ -59,7 +59,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.routing.RouteRepository
 import com.example.kilivana_driver.ui.components.KilivanaButton
@@ -99,12 +98,10 @@ import kotlinx.coroutines.withContext
 
 private enum class UiTripStage { HEADING_TO_PICKUP, IN_TRANSIT, DELIVERED }
 
-private const val DRIVER_BLUE = 0xFF3B82F6.toInt()
 private const val FARMER_GREEN = 0xFF2E7D32.toInt()
 private const val BUYER_RED = 0xFFE53935.toInt()
 private const val ROUTE_LINE = 0xFF1F6B2E.toInt()
 private const val PREVIEW_LINE = 0xFF8A94A6.toInt()
-private const val TRACKING_LINE = 0xFF3B82F6.toInt()
 private const val ROUTE_CAMERA_PITCH = 45.0
 
 /** Shows the active trip map, tracking history and pickup/delivery controls, forwarding completion to the caller. */
@@ -131,8 +128,6 @@ fun JobRouteScreen(
     val routePoints by tripViewModel.routePoints.collectAsStateWithLifecycle()
     val usingEstimatedRoute by tripViewModel.usingEstimatedRoute.collectAsStateWithLifecycle()
     val distanceLabel by tripViewModel.distanceLabel.collectAsStateWithLifecycle()
-    val queueSize by tripViewModel.queueSize.collectAsStateWithLifecycle()
-    val trackingPoints by tripViewModel.trackingPoints.collectAsStateWithLifecycle()
     val isSubmittingProof by tripViewModel.isSubmittingProof.collectAsStateWithLifecycle()
     val proofError by tripViewModel.proofError.collectAsStateWithLifecycle()
     val proofFiled by tripViewModel.proofFiled.collectAsStateWithLifecycle()
@@ -270,19 +265,17 @@ fun JobRouteScreen(
         }
     }
 
-    LaunchedEffect(routeMapAnnotations, pickupPoint, dropoffPoint, trackingPoints) {
+    LaunchedEffect(routeMapAnnotations, pickupPoint, dropoffPoint) {
         routeMapAnnotations?.drawPoints(
             pickupPoint = pickupPoint,
-            dropoffPoint = dropoffPoint,
-            trackingPoints = trackingPoints
+            dropoffPoint = dropoffPoint
         )
     }
 
-    LaunchedEffect(routeMapAnnotations, routePoints, previewRouteToBuyer, trackingPoints) {
+    LaunchedEffect(routeMapAnnotations, routePoints, previewRouteToBuyer) {
         routeMapAnnotations?.drawLines(
             activeRoute = routePoints,
-            previewRoute = previewRouteToBuyer,
-            trackingPoints = trackingPoints
+            previewRoute = previewRouteToBuyer
         )
     }
 
@@ -402,34 +395,6 @@ fun JobRouteScreen(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Showing an estimated route (live roads unavailable)",
-                        color = KilivanaAmber,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            // Offline queue indicator
-            if (queueSize > 0) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.Start)
-                        .shadow(2.dp, RoundedCornerShape(50))
-                        .clip(RoundedCornerShape(50))
-                        .background(KilivanaAmberTint)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = null,
-                        tint = KilivanaAmber,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Queued $queueSize location update(s) — will send when online",
                         color = KilivanaAmber,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
@@ -625,13 +590,11 @@ private class RouteMapAnnotations(
 ) {
     private val pickupIcon by lazy { createCircleBitmap(FARMER_GREEN) }
     private val dropoffIcon by lazy { createCircleBitmap(BUYER_RED) }
-    private val trackingIcon by lazy { createCircleBitmap(DRIVER_BLUE, radius = 9f) }
 
-    /** Replaces stop annotations with pickup, dropoff and the latest tracking ping when available. */
+    /** Replaces stop annotations with pickup and dropoff markers. */
     fun drawPoints(
         pickupPoint: GeoPoint,
-        dropoffPoint: GeoPoint,
-        trackingPoints: List<TrackingHistoryPoint>
+        dropoffPoint: GeoPoint
     ) {
         stopPointManager.deleteAll()
         stopPointManager.create(
@@ -661,28 +624,12 @@ private class RouteMapAnnotations(
                 .withTextHaloWidth(1.5)
         )
 
-        trackingPoints.lastOrNull()?.let { latest ->
-            stopPointManager.create(
-                PointAnnotationOptions()
-                    .withPoint(Point.fromLngLat(latest.longitude, latest.latitude))
-                    .withIconImage(trackingIcon)
-                    .withIconAnchor(IconAnchor.CENTER)
-                    .withTextField("Last ping")
-                    .withTextAnchor(TextAnchor.BOTTOM)
-                    .withTextOffset(listOf(0.0, -0.35))
-                    .withTextSize(11.0)
-                    .withTextColor(DRIVER_BLUE)
-                    .withTextHaloColor(android.graphics.Color.WHITE)
-                    .withTextHaloWidth(1.5)
-            )
-        }
     }
 
-    /** Replaces route lines with preview, active and tracking paths that each contain at least two points. */
+    /** Replaces route lines with preview and active paths that each contain at least two points. */
     fun drawLines(
         activeRoute: List<GeoPoint>?,
-        previewRoute: List<GeoPoint>?,
-        trackingPoints: List<TrackingHistoryPoint>
+        previewRoute: List<GeoPoint>?
     ) {
         lineManager.deleteAll()
         previewRoute?.takeIf { it.size >= 2 }?.let {
@@ -691,10 +638,6 @@ private class RouteMapAnnotations(
         activeRoute?.takeIf { it.size >= 2 }?.let {
             lineManager.createPolyline(it, ROUTE_LINE, width = 5.0, opacity = 0.95)
         }
-        trackingPoints
-            .map { GeoPoint(it.latitude, it.longitude) }
-            .takeIf { it.size >= 2 }
-            ?.let { lineManager.createPolyline(it, TRACKING_LINE, width = 3.0, opacity = 0.65) }
     }
 
     /** Releases the stop, vehicle and route annotation managers. */
@@ -808,7 +751,6 @@ private fun DeliveryProofDialog(
     onDismiss: () -> Unit
 ) {
     var recipientName by remember { mutableStateOf("") }
-    val hasEvidence = photoUri != null && photoUri.scheme !in setOf("content", "file")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -816,15 +758,9 @@ private fun DeliveryProofDialog(
         text = {
             Column {
                 Text(
-                    text = "The delivery code will be checked when you submit the proof.",
+                    text = "Provide the recipient name or attach a photo/signature proof. The delivery code will be verified on submission.",
                     color = KilivanaTextMuted,
                     fontSize = 14.sp
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Photo uploads are not available yet. You can preview a selected photo, but proof cannot be submitted until uploads are supported.",
-                    color = KilivanaTextMuted,
-                    fontSize = 12.sp
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 OutlinedTextField(
@@ -857,7 +793,7 @@ private fun DeliveryProofDialog(
         confirmButton = {
             TextButton(
                 onClick = { onSubmit(recipientName, "") },
-                enabled = !isSubmitting && hasEvidence
+                enabled = !isSubmitting
             ) {
                 Text(
                     text = if (isSubmitting) "Submitting..." else "Submit proof",

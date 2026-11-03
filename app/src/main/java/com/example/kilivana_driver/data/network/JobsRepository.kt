@@ -4,7 +4,6 @@ import com.example.kilivana_driver.data.model.ApiError
 import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.DeliveryJob
 import com.example.kilivana_driver.data.model.JobsErrorType
-import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -113,26 +112,6 @@ class JobsRepository(
     }
 
     /**
-     * Gets the tracking history (GPS fixes) for a job.
-     */
-    suspend fun getTrackingHistory(jobId: Long): Result<List<TrackingHistoryPoint>> =
-        withContext(ioDispatcher) {
-            runCatchingBody { api.getTrackingHistory(jobId) }
-        }
-
-    /**
-     * Accepts an ASSIGNED job on behalf of the driver.
-     *
-     * POST /api/v1/logistics/jobs/{id}/accept?driverId={driverId}
-     * Returns 400 if the job is not in ASSIGNED status or the driver is not
-     * the one assigned to it.
-     */
-    suspend fun acceptJob(jobId: Long, driverId: Long): Result<DeliveryJob> =
-        withContext(ioDispatcher) {
-            runCatchingBody { api.acceptJob(jobId, driverId) }
-        }
-
-    /**
      * Advances a job to the given status (e.g. "picked_up", "delivered").
      *
      * PUT /api/v1/logistics/jobs/{id}/status?status={status}
@@ -151,6 +130,37 @@ class JobsRepository(
     suspend fun cancelJob(jobId: Long, reason: String): Result<DeliveryJob> =
         withContext(ioDispatcher) {
             runCatchingBody { api.cancelJob(jobId, reason) }
+        }
+
+    /** Rejects an assigned job and returns it to dispatch, per the trip contract. */
+    suspend fun rejectJob(jobId: Long, reason: String): Result<DeliveryJob> =
+        withContext(ioDispatcher) {
+            runCatchingBody { api.rejectJob(jobId, reason) }
+        }
+
+    /** Lists jobs by status for the current driver. */
+    suspend fun getJobsByStatus(status: String): Result<List<DeliveryJob>> =
+        withContext(ioDispatcher) {
+            try {
+                val response = withTimeoutOrNull(API_TIMEOUT_MS) { api.getJobsByStatus(status) }
+                when {
+                    response == null -> Result.failure(
+                        JobsException(JobsErrorType.SERVER_DOWN, "Request timed out — check your connection")
+                    )
+                    response.success != false -> Result.success(response.data.orEmpty())
+                    else -> Result.failure(
+                        JobsException(JobsErrorType.OTHER, describe(response.error, response.message))
+                    )
+                }
+            } catch (e: Exception) {
+                Result.failure(classifyException(e))
+            }
+        }
+
+    /** Verifies the buyer's delivery handover code via the legacy job endpoint. */
+    suspend fun verifyOtp(jobId: Long, otp: String): Result<DeliveryJob> =
+        withContext(ioDispatcher) {
+            runCatchingBody { api.verifyOtp(jobId, otp) }
         }
 
     /** Unwraps a response with data into a Result, classifying rejected responses and request exceptions as failures. */

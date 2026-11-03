@@ -7,7 +7,9 @@ import com.example.kilivana_driver.data.model.JobStatus
 import com.example.kilivana_driver.data.model.JobsErrorType
 import com.example.kilivana_driver.data.network.DRIVER_ROLE
 import com.example.kilivana_driver.data.network.JobsRepository
+import com.example.kilivana_driver.data.network.LocationRepository
 import com.example.kilivana_driver.data.network.SessionStore
+import com.example.kilivana_driver.data.network.TripRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,7 +42,10 @@ data class JobsUiState(
  * composables already consume.
  */
 class JobsViewModel(
-    private val jobsRepository: JobsRepository = JobsRepository()
+    private val jobsRepository: JobsRepository = JobsRepository(),
+    private val tripRepository: TripRepository = TripRepository(
+        locationRepository = LocationRepository()
+    )
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(JobsUiState())
@@ -100,15 +105,20 @@ class JobsViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val driverId = currentUserId ?: SessionStore.userId
-            if (driverId == null) {
-                _uiState.update { it.copy(isLoading = false, jobs = emptyList()) }
-                return@launch
+
+            // Prefer server-derived identity (GET /api/v1/logistics/jobs)
+            var result = jobsRepository.getJobs()
+            if (result.isSuccess && result.getOrNull().isNullOrEmpty() && driverId != null) {
+                val driverJobsResult = jobsRepository.getJobsByDriver(driverId)
+                if (driverJobsResult.isSuccess && !driverJobsResult.getOrNull().isNullOrEmpty()) {
+                    result = driverJobsResult
+                }
             }
-            val result = jobsRepository.getJobsByDriver(driverId)
+
             val signedInDriver = SessionStore.currentUser.value
                 ?.takeIf { it.role.equals(DRIVER_ROLE, ignoreCase = true) }
-            if (signedInDriver?.id != driverId) {
-                currentUserId = signedInDriver?.id
+            if (signedInDriver != null && signedInDriver.id != driverId) {
+                currentUserId = signedInDriver.id
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -117,7 +127,7 @@ class JobsViewModel(
                         errorType = null
                     )
                 }
-                if (signedInDriver != null) refresh()
+                refresh()
                 return@launch
             }
 
@@ -134,6 +144,9 @@ class JobsViewModel(
                         errorMessage = null,
                         errorType = null
                     )
+                }
+                viewModelScope.launch {
+                    tripRepository.checkForActiveTrip()
                 }
             } else {
                 val exception = result.exceptionOrNull()
@@ -165,47 +178,50 @@ class JobsViewModel(
     }
 
     fun acceptJob(jobId: String) {
-        val job = _uiState.value.jobs.firstOrNull { it.id == jobId } ?: return
-        val driverId = SessionStore.userId ?: return
+        if (_uiState.value.jobs.none { it.id == jobId }) return
         val numericId = jobId.toLongOrNull() ?: run {
-            // Sample/non-numeric ID: fall back to local-only update
-            _uiState.update { state ->
-                state.copy(
-                    jobs = state.jobs.map { job ->
-                        if (job.id == jobId) job.copy(status = JobStatus.ACCEPTED, isNew = false) else job
-                    },
-                    selectedStatus = JobStatus.ACCEPTED
-                )
-            }
+            _uiState.update { it.copy(errorMessage = "This job has an invalid ID.") }
             return
         }
         viewModelScope.launch {
-            val result = jobsRepository.acceptJob(numericId, driverId)
-            if (result.isSuccess) {
-                val updated = result.getOrNull()!!.toDomain()
-                _uiState.update { state ->
-                    state.copy(
-                        jobs = state.jobs.map { if (it.id == jobId) updated else it },
-                        selectedStatus = JobStatus.ACCEPTED
-                    )
+            val result = tripRepository.acceptJob(numericId)
+            result.fold(
+                onSuccess = { trip ->
+                    if (trip.tripId.isBlank()) {
+                        _uiState.update {
+                            it.copy(errorMessage = "The backend accepted the job but did not return a trip ID.")
+                        }
+                    } else {
+                        _uiState.update { state ->
+                            state.copy(
+                                jobs = state.jobs.map {
+                                    if (it.id == jobId) {
+                                        it.copy(
+                                            status = JobStatus.ACCEPTED,
+                                            isNew = false,
+                                            tripId = trip.tripId
+                                        )
+                                    } else it
+                                },
+                                selectedStatus = JobStatus.ACCEPTED
+                            )
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update { it.copy(errorMessage = error.message) }
                 }
-            } else {
-                _uiState.update {
-                    it.copy(errorMessage = result.exceptionOrNull()?.message)
-                }
-            }
+            )
         }
     }
 
     fun declineJob(jobId: String, reason: String = "Driver declined") {
         val numericId = jobId.toLongOrNull() ?: run {
-            _uiState.update { state ->
-                state.copy(jobs = state.jobs.filter { it.id != jobId })
-            }
+            _uiState.update { it.copy(errorMessage = "This job has an invalid ID.") }
             return
         }
         viewModelScope.launch {
-            val result = jobsRepository.cancelJob(numericId, reason)
+            val result = jobsRepository.rejectJob(numericId, reason)
             if (result.isSuccess) {
                 _uiState.update { state ->
                     state.copy(jobs = state.jobs.filter { it.id != jobId })
@@ -217,28 +233,8 @@ class JobsViewModel(
     }
 
     fun completeJob(jobId: String) {
-        val numericId = jobId.toLongOrNull() ?: run {
-            _uiState.update { state ->
-                state.copy(
-                    jobs = state.jobs.map { if (it.id == jobId) it.copy(status = JobStatus.COMPLETED) else it },
-                    selectedStatus = JobStatus.COMPLETED
-                )
-            }
-            return
-        }
-        viewModelScope.launch {
-            val result = jobsRepository.updateJobStatus(numericId, "delivered")
-            if (result.isSuccess) {
-                val updated = result.getOrNull()!!.toDomain()
-                _uiState.update { state ->
-                    state.copy(
-                        jobs = state.jobs.map { if (it.id == jobId) updated else it },
-                        selectedStatus = JobStatus.COMPLETED
-                    )
-                }
-            } else {
-                _uiState.update { it.copy(errorMessage = result.exceptionOrNull()?.message) }
-            }
+        _uiState.update {
+            it.copy(errorMessage = "A delivery can only be completed with verified proof from the trip screen.")
         }
     }
 }

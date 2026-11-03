@@ -274,6 +274,12 @@ fun JobDetailsScreen(
                     }
                     JobStatus.COMPLETED -> Unit
                     JobStatus.CANCELLED -> Unit
+                    JobStatus.UNKNOWN -> {
+                        KilivanaButton(
+                            text = "Refresh status",
+                            onClick = onBack
+                        )
+                    }
                 }
             }
         }

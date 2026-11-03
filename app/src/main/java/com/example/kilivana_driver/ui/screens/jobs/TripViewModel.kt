@@ -5,25 +5,18 @@ import android.location.Location
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kilivana_driver.data.model.Job
-import com.example.kilivana_driver.data.model.LocationUpdate
 import com.example.kilivana_driver.data.model.ProofOfDelivery
 import com.example.kilivana_driver.data.model.TrackingConfig
-import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import com.example.kilivana_driver.data.model.TripStage
-import com.example.kilivana_driver.data.model.UploadResult
 import com.example.kilivana_driver.data.network.JobsRepository
 import com.example.kilivana_driver.data.network.LocationRepository
-import com.example.kilivana_driver.data.network.ProofOfDeliveryRepository
-import com.example.kilivana_driver.data.network.SessionStore
 import com.example.kilivana_driver.data.network.TripRepository
 import com.example.kilivana_driver.ui.screens.map.GeoPoint
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * ViewModel for the active trip (En Route screen).
@@ -31,21 +24,19 @@ import kotlinx.coroutines.withContext
  * Coordinates:
  * - GPS location stream (from FusedLocationProvider via rememberUserLocation)
  * - Route calculation (Mapbox Directions via RouteRepository)
- * - Backend location uploads (via LocationRepository)
+ * - Active-trip state (via TripRepository)
  * - Trip lifecycle (via TripRepository)
  * - Smooth vehicle animation (via CarMarker logic)
  *
  * This ViewModel is scoped to the JobRouteScreen lifecycle. The foreground
- * LocationTrackingService uses its own LocationRepository instance for
- * background uploads, but they share the same TripRepository state via
- * SessionStore and the active trip ID.
+ * The foreground LocationTrackingService is the sole GPS uploader, avoiding
+ * duplicate fixes while this screen is visible.
  */
 class TripViewModel(application: Application) : AndroidViewModel(application) {
 
     private val locationRepository = LocationRepository()
     private val tripRepository = TripRepository(locationRepository = locationRepository)
     private val jobsRepository = JobsRepository()
-    private val proofRepository = ProofOfDeliveryRepository()
     private val trackingConfig = TrackingConfig.DEFAULT
 
     // ---- Inputs from the screen ----
@@ -82,6 +73,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Active trip ID (null when no trip is being tracked). */
     val activeTripId: StateFlow<String?> = tripRepository.activeTripId
+    val trackingActive: StateFlow<Boolean> = tripRepository.trackingActive
 
     /** Current route points for the active leg. */
     private val _routePoints = MutableStateFlow<List<GeoPoint>?>(null)
@@ -94,21 +86,6 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     /** Distance label for the current leg (e.g., "12.3 km to farmer"). */
     private val _distanceLabel = MutableStateFlow<String>("")
     val distanceLabel: StateFlow<String> = _distanceLabel.asStateFlow()
-
-    /** Last known location upload result (for debugging/diagnostics). */
-    private val _lastUploadResult = MutableStateFlow<UploadResult?>(null)
-    val lastUploadResult: StateFlow<UploadResult?> = _lastUploadResult.asStateFlow()
-
-    /** Offline queue size (for diagnostics). */
-    val queueSize: StateFlow<Int> = locationRepository.queueSize
-
-    /** GPS fixes the driver uploaded for this job, fetched from GET /tracking. */
-    private val _trackingPoints = MutableStateFlow<List<TrackingHistoryPoint>>(emptyList())
-    val trackingPoints: StateFlow<List<TrackingHistoryPoint>> = _trackingPoints.asStateFlow()
-
-    /** Last error from a tracking-history fetch, if any. */
-    private val _trackingError = MutableStateFlow<String?>(null)
-    val trackingError: StateFlow<String?> = _trackingError.asStateFlow()
 
     // ---- Heading/animation state (mirrors CarMarker logic) ----
     private var lastLocationForHeading: GeoPoint? = null
@@ -127,21 +104,6 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         _usingEstimatedRoute.value = false
         _distanceLabel.value = "Finding route to farmer…"
         lastRouteFetchAtMs = 0L
-        loadTrackingHistory(job.id)
-    }
-
-    /** Fetches the GPS tracking history for this job from the backend. */
-    private fun loadTrackingHistory(jobId: String) {
-        val id = jobId.toLongOrNull() ?: return
-        viewModelScope.launch {
-            val result = jobsRepository.getTrackingHistory(id)
-            if (result.isSuccess) {
-                _trackingPoints.value = result.getOrNull().orEmpty()
-                _trackingError.value = null
-            } else {
-                _trackingError.value = result.exceptionOrNull()?.message
-            }
-        }
     }
 
     /** Called by the screen when a new GPS fix arrives. */
@@ -155,39 +117,38 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         // Update vehicle position on map (handled by screen via CarMarker).
         // Screen will call getCurrentVehiclePosition().
 
-        // Upload location to backend if tracking is active.
-        maybeUploadLocation(location)
-
         // Maybe recalculate route if we've moved far enough.
         maybeRecalculateRoute(geoPoint)
     }
 
     /** Starts tracking for the current job (driver tapped "Start Trip"). */
     fun startTrip() {
-        _job?.let { job ->
-            viewModelScope.launch {
-                val started = tripRepository.startTracking(job)
-                if (!started) {
-                    _proofError.value = tripRepository.lastError.value ?: "Could not start delivery tracking."
-                }
-                // Route lookup is local and can still help the driver if tracking
-                // setup needs to be retried.
-                fetchRouteToTarget()
+        val tripId = _job?.tripId
+        if (tripId.isNullOrBlank()) {
+            _proofError.value = "This accepted job has no trip ID. Refresh jobs or contact dispatch."
+            return
+        }
+        viewModelScope.launch {
+            if (!tripRepository.startTracking(tripId)) {
+                _proofError.value = tripRepository.lastError.value ?: "Could not start delivery tracking."
             }
+            fetchRouteToTarget()
         }
     }
 
     /** Advances to IN_TRANSIT stage (driver tapped "Mark as Picked Up"). */
     fun markPickedUp() {
         val job = _job ?: return
-        val id = job.id.toLongOrNull() ?: return
+        val tripId = job.tripId ?: run {
+            _proofError.value = "This job has no trip ID."
+            return
+        }
         viewModelScope.launch {
-            val result = jobsRepository.updateJobStatus(id, "picked_up")
+            val result = tripRepository.confirmPickup(tripId)
             if (result.isFailure) {
                 _proofError.value = result.exceptionOrNull()?.message ?: "Could not confirm pickup."
                 return@launch
             }
-            tripRepository.advanceToInTransit()
             _targetGeoPoint = GeoPoint(job.dropoffLat, job.dropoffLon)
             _routePoints.value = null
             _usingEstimatedRoute.value = false
@@ -205,21 +166,22 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         signatureUrl: String
     ) {
         if (_isSubmittingProof.value) return
-        val jobId = _job?.id?.toLongOrNull()
+        val jobId = _job?.id?.toLongOrNull()?.takeIf { it > 0L }
         if (jobId == null) {
             _proofError.value = "This job has an invalid ID."
+            return
+        }
+        val tripId = _job?.tripId
+        if (tripId.isNullOrBlank()) {
+            _proofError.value = "This job has no trip ID."
             return
         }
         if (otp.isBlank()) {
             _proofError.value = "Enter the buyer's delivery code."
             return
         }
-        if (photoUrl.isBlank() && signatureUrl.isBlank()) {
-            _proofError.value = "Add a photo or signature as delivery evidence."
-            return
-        }
-        if (photoUrl.startsWith("content://") || photoUrl.startsWith("file://")) {
-            _proofError.value = "The photo is selected, but the backend has no evidence image upload endpoint yet."
+        if (recipientName.isBlank() && photoUrl.isBlank() && signatureUrl.isBlank()) {
+            _proofError.value = "Add recipient name, photo, or signature as delivery evidence."
             return
         }
 
@@ -232,12 +194,10 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
                 photoUrl = photoUrl.trim().takeIf { it.isNotEmpty() },
                 signatureUrl = signatureUrl.trim().takeIf { it.isNotEmpty() }
             )
-            val result = proofRepository.file(proof, otp.trim())
+            val result = tripRepository.fileProof(tripId, proof, otp.trim())
             _isSubmittingProof.value = false
             result.fold(
                 onSuccess = {
-                    // Filing proof validates the OTP and advances the job to
-                    // delivered on the backend. Only local tracking is ended here.
                     tripRepository.stopTracking("COMPLETED")
                     _proofFiled.value = true
                 },
@@ -316,29 +276,6 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
                 lastLocationForHeading = now
                 hasInitialHeading = true
             }
-        }
-    }
-
-    private fun maybeUploadLocation(location: Location) {
-        val tripId = tripRepository.activeTripId.value ?: return
-        val stage = tripRepository.tripStage.value ?: return
-
-        // Only upload during active tracking stages.
-        if (stage !in setOf(TripStage.HEADING_TO_PICKUP, TripStage.IN_TRANSIT)) return
-
-        val update = LocationUpdate(
-            tripId = tripId,
-            latitude = location.latitude,
-            longitude = location.longitude,
-            bearing = if (location.hasBearing()) location.bearing else null,
-            speed = if (location.hasSpeed()) location.speed else null,
-            accuracy = if (location.hasAccuracy()) location.accuracy else null
-        )
-
-        // Fire-and-forget: the repository handles queuing/retry.
-        viewModelScope.launch {
-            val result = locationRepository.uploadNow(update)
-            _lastUploadResult.value = result
         }
     }
 
