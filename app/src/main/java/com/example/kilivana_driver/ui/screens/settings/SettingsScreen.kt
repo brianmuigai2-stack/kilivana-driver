@@ -123,7 +123,6 @@ fun SettingsScreen(
         isRefreshing = true
         coroutineScope.launch {
             kotlinx.coroutines.delay(600)
-            onTestApiConnection()
             isRefreshing = false
         }
         Unit

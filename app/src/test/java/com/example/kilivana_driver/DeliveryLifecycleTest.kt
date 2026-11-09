@@ -281,9 +281,48 @@ class DeliveryLifecycleTest {
         val restored = repository.checkForActiveTrip()
 
         assertEquals("trip-8", restored?.tripId)
+        assertEquals("trip-8", api.startedTrackingTripId)
         assertEquals("trip-8", repository.activeTripId.value)
         assertEquals(TripStage.IN_TRANSIT, repository.tripStage.value)
         assertTrue(repository.trackingActive.value)
+    }
+
+    @Test
+    fun arrivedAtDestinationStatusRestoresInTransitStageDespiteWhitespace() {
+        assertEquals(
+            TripStage.IN_TRANSIT,
+            TripRepository.tripStageForStatus(" arrived_at_destination ")
+        )
+        assertEquals(
+            JobStatus.ACCEPTED,
+            DeliveryJob(id = 43, status = "ARRIVED_AT_DESTINATION").toDomain().status
+        )
+    }
+
+    @Test
+    fun failedRecoveryTrackingStartPreservesPriorTripAndDisabledTracking() = runBlocking {
+        val api = FakeTripApi().apply {
+            acceptResponse = ApiResponse(
+                success = true,
+                data = trip("accepted").copy(tripId = "trip-prior")
+            )
+            myTripsResponse = ApiResponse(
+                success = true,
+                data = listOf(trip(status = "in_transit"))
+            )
+            startResponse = ApiResponse(success = false, message = "tracking unavailable")
+        }
+        val repository = TripRepository(api, LocationRepository())
+        repository.clear()
+        assertTrue(repository.acceptJob(42).isSuccess)
+
+        val restored = repository.checkForActiveTrip()
+
+        assertNull(restored)
+        assertEquals("trip-8", api.startedTrackingTripId)
+        assertEquals("trip-prior", repository.activeTripId.value)
+        assertFalse(repository.trackingActive.value)
+        assertEquals(TripStage.HEADING_TO_PICKUP, repository.tripStage.value)
     }
 
     @Test
@@ -339,6 +378,7 @@ class DeliveryLifecycleTest {
             ApiResponse(success = true, data = null)
         var otpResponse: ApiResponse<TripStatus> = ApiResponse(success = true, data = trip("accepted"))
         var proofWasSubmitted = false
+        var startedTrackingTripId: String? = null
 
         override suspend fun getMyTrips() = myTripsResponse
         override suspend fun acceptJob(jobId: Long) = acceptResponse
@@ -359,7 +399,10 @@ class DeliveryLifecycleTest {
         override suspend fun getActiveTrips(): ApiResponse<List<DeliveryJob>> =
             ApiResponse(success = true, data = emptyList())
         override suspend fun getCurrentTrip() = currentTripResponse
-        override suspend fun startTracking(tripId: String) = startResponse
+        override suspend fun startTracking(tripId: String): ApiResponse<Unit> {
+            startedTrackingTripId = tripId
+            return startResponse
+        }
     }
 
     private class FakeJobsApi(

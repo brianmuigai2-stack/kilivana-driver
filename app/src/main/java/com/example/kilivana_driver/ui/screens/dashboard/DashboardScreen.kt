@@ -99,6 +99,7 @@ fun DashboardScreen(
     onHistoryClick: () -> Unit,
     onProfileClick: () -> Unit,
     onRefresh: () -> Unit = {},
+    isRefreshing: Boolean = uiState.isLoading,
     modifier: Modifier = Modifier
 ) {
     // Today's date, computed once per composition. Note: a driver
@@ -109,7 +110,7 @@ fun DashboardScreen(
     }
 
     KilivanaPullRefreshBox(
-        isRefreshing = uiState.isLoading,
+        isRefreshing = isRefreshing,
         onRefresh = onRefresh,
         modifier = modifier.fillMaxSize()
     ) {

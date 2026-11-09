@@ -103,7 +103,7 @@ data class DeliveryJob(
         "pending_assignment", "pending", "new", "available", "unassigned", "assigned",
         "waiting_for_driver", "driver_assigned" -> JobStatus.AVAILABLE
 
-        "accepted", "accepted_by_driver", "picked_up", "pickup_confirmed",
+        "accepted", "accepted_by_driver", "arrived_at_destination", "picked_up", "pickup_confirmed",
         "shipment", "in_shipment", "shipped", "in_transit", "in-transit",
         "transit", "in_progress", "en_route", "en_route_to_buyer",
         "en_route_to_dropoff", "on_the_way", "traveling" -> JobStatus.ACCEPTED

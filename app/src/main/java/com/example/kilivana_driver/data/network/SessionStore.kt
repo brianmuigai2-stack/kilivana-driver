@@ -23,6 +23,7 @@ object SessionStore {
 
     private val _refreshToken = MutableStateFlow<String?>(null)
     val refreshToken: StateFlow<String?> = _refreshToken.asStateFlow()
+    private var onSessionEnded: (() -> Unit)? = null
 
     /**
      * The id every X-User-Id endpoint needs. Null until a login succeeds, so
@@ -50,5 +51,11 @@ object SessionStore {
         _currentUser.value = null
         _accessToken.value = null
         _refreshToken.value = null
+        onSessionEnded?.invoke()
+    }
+
+    /** Registers process-level cleanup that runs whenever the in-memory session ends. */
+    fun setSessionEndHandler(handler: () -> Unit) {
+        onSessionEnded = handler
     }
 }

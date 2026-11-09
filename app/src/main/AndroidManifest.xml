@@ -4,6 +4,7 @@
 
     <!-- Internet: every API call, OSRM routing and OpenStreetMap tile -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- GPS for the Map and En Route screens (requested at runtime) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />

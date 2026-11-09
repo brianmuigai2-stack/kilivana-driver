@@ -33,7 +33,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,7 +49,6 @@ import com.example.kilivana_driver.data.model.DeliveryOutcome
 import com.example.kilivana_driver.data.model.DeliveryRecord
 import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
 import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
-import kotlinx.coroutines.launch
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
 import com.example.kilivana_driver.ui.theme.KilivanaError
@@ -70,10 +68,13 @@ private enum class HistoryFilter(val label: String) {
     CANCELLED("Cancelled")
 }
 
+/** Shows filtered completed and cancelled delivery history with a live refresh action. */
 @Composable
 fun DeliveryHistoryScreen(
     records: List<DeliveryRecord>,
     onBack: () -> Unit,
+    isRefreshing: Boolean = false,
+    onRefreshJobs: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var filter by rememberSaveable { mutableStateOf(HistoryFilter.ALL) }
@@ -84,20 +85,9 @@ fun DeliveryHistoryScreen(
         HistoryFilter.CANCELLED -> records.filter { it.outcome == DeliveryOutcome.CANCELLED }
     }
 
-    var isRefreshing by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
-    val onRefreshAction = {
-        isRefreshing = true
-        coroutineScope.launch {
-            kotlinx.coroutines.delay(600)
-            isRefreshing = false
-        }
-        Unit
-    }
-
     KilivanaPullRefreshBox(
         isRefreshing = isRefreshing,
-        onRefresh = onRefreshAction,
+        onRefresh = onRefreshJobs,
         modifier = modifier.fillMaxSize()
     ) {
         Column(

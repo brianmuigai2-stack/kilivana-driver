@@ -86,6 +86,7 @@ class JobsViewModel(
                     _uiState.update {
                         it.copy(
                             jobs = emptyList(),
+                            isLoading = false,
                             errorMessage = null
                         )
                     }
@@ -104,11 +105,26 @@ class JobsViewModel(
         if (_uiState.value.isLoading) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val driverId = currentUserId ?: SessionStore.userId
+            val driverId = SessionStore.userId ?: run {
+                _uiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
 
-            // Prefer server-derived identity (GET /api/v1/logistics/jobs)
-            var result = jobsRepository.getJobs()
-            if (result.isSuccess && result.getOrNull().isNullOrEmpty() && driverId != null) {
+            // Load every page before replacing the list, so older deliveries remain available in history.
+            var page = 0
+            val allJobs = mutableListOf<com.example.kilivana_driver.data.model.DeliveryJob>()
+            var result = jobsRepository.getJobs(page = page)
+            while (result.isSuccess) {
+                val pageJobs = result.getOrNull().orEmpty()
+                allJobs += pageJobs
+                if (pageJobs.size < 20) break
+                page++
+                result = jobsRepository.getJobs(page = page)
+            }
+            if (result.isSuccess) {
+                result = Result.success(allJobs.distinctBy { it.id })
+            }
+            if (result.isSuccess && result.getOrNull().isNullOrEmpty()) {
                 val driverJobsResult = jobsRepository.getJobsByDriver(driverId)
                 if (driverJobsResult.isSuccess && !driverJobsResult.getOrNull().isNullOrEmpty()) {
                     result = driverJobsResult
@@ -117,17 +133,7 @@ class JobsViewModel(
 
             val signedInDriver = SessionStore.currentUser.value
                 ?.takeIf { it.role.equals(DRIVER_ROLE, ignoreCase = true) }
-            if (signedInDriver != null && signedInDriver.id != driverId) {
-                currentUserId = signedInDriver.id
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        jobs = emptyList(),
-                        errorMessage = null,
-                        errorType = null
-                    )
-                }
-                refresh()
+            if (signedInDriver == null || signedInDriver.id != driverId) {
                 return@launch
             }
 

@@ -74,6 +74,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _otpVerified = MutableStateFlow(false)
     val otpVerified: StateFlow<Boolean> = _otpVerified.asStateFlow()
+    private var otpVerifiedJobId: String? = null
 
     private val _proofError = MutableStateFlow<String?>(null)
     val proofError: StateFlow<String?> = _proofError.asStateFlow()
@@ -109,14 +110,21 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         _isSubmittingProof.value = false
         _isVerifyingOtp.value = false
         _otpError.value = null
-        _otpVerified.value = false
+        _otpVerified.value = otpVerifiedJobId == job.id
+        if (!_otpVerified.value) otpVerifiedJobId = null
         _proofError.value = null
         _proofFiled.value = false
         tripRepository.restoreSavedStatus(job.backendStatus, job.tripId)
-        _targetGeoPoint = GeoPoint(job.pickupLat, job.pickupLon)
+        val isInTransit = TripRepository.tripStageForStatus(job.backendStatus.orEmpty()) ==
+            TripStage.IN_TRANSIT
+        _targetGeoPoint = if (isInTransit) {
+            GeoPoint(job.dropoffLat, job.dropoffLon)
+        } else {
+            GeoPoint(job.pickupLat, job.pickupLon)
+        }
         _routePoints.value = null
         _usingEstimatedRoute.value = false
-        _distanceLabel.value = "Finding route to farmer…"
+        _distanceLabel.value = if (isInTransit) "Finding route to buyer…" else "Finding route to farmer…"
         lastRouteFetchAtMs = 0L
     }
 
@@ -178,10 +186,11 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Resolves this job's trip before considering the driver's current trip. */
     private suspend fun resolveTripId(job: Job): String? =
         job.tripId?.takeIf { it.isNotBlank() }
-            ?: tripRepository.activeTripId.value?.takeIf { it.isNotBlank() }
             ?: tripRepository.resolveTripIdForJob(job.id)
+            ?: tripRepository.activeTripId.value?.takeIf { it.isNotBlank() }
 
 
     /** Validates the buyer's OTP before moving on to evidence collection. */
@@ -217,6 +226,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
                         updatedJob.status,
                         updatedJob.tripId ?: tripRepository.activeTripId.value
                     )
+                    otpVerifiedJobId = job.id
                     _otpVerified.value = true
                 },
                 onFailure = { error ->

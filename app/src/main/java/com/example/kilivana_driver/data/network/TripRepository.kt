@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -58,20 +59,32 @@ class TripRepository(
 
     /** Starts reporting only after the backend confirms tracking for this trip ID. */
     suspend fun startTracking(tripId: String): Boolean = withContext(ioDispatcher) {
-        _isBusy.value = true
-        _lastError.value = null
-        try {
-            val response = api.startTracking(tripId)
-            if (response.success == false) {
-                _lastError.value = describe(response, "Unable to start trip tracking")
-                return@withContext false
-            }
+        val expectedGeneration = stateGeneration.get()
+        if (!requestTrackingStart(tripId)) return@withContext false
+        synchronized(stateLock) {
+            if (stateGeneration.get() != expectedGeneration) return@withContext false
             _activeTripId.value = tripId
             _trackingActive.value = true
             if (_tripStage.value == null) _tripStage.value = TripStage.HEADING_TO_PICKUP
             locationRepository.clearQueue()
             true
+        }
+    }
+
+    /** Confirms server tracking without publishing local trip state prematurely. */
+    private suspend fun requestTrackingStart(tripId: String): Boolean {
+        _isBusy.value = true
+        _lastError.value = null
+        return try {
+            val response = api.startTracking(tripId)
+            if (response.success == false) {
+                _lastError.value = describe(response, "Unable to start trip tracking")
+                false
+            } else {
+                true
+            }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             _lastError.value = describeException(e)
             false
         } finally {
@@ -245,23 +258,28 @@ class TripRepository(
      * endpoint in the supplied backend contract.
      */
     fun stopTracking(reason: String) {
-        _tripStage.value = when (reason.uppercase()) {
-            "COMPLETED" -> TripStage.DELIVERED
-            else -> TripStage.CANCELLED
+        synchronized(stateLock) {
+            stateGeneration.incrementAndGet()
+            _tripStage.value = when (reason.uppercase()) {
+                "COMPLETED" -> TripStage.DELIVERED
+                else -> TripStage.CANCELLED
+            }
+            _activeTripId.value = null
+            _trackingActive.value = false
+            _backendStatus.value = null
+            locationRepository.clearQueue()
         }
-        _activeTripId.value = null
-        _trackingActive.value = false
-        _backendStatus.value = null
-        locationRepository.clearQueue()
     }
 
     suspend fun syncStatus(): TripStatus? = checkForActiveTrip()
 
     /** Restores the latest active trip identity/status after reconnect. */
     suspend fun checkForActiveTrip(): TripStatus? = withContext(ioDispatcher) {
+        val recoveryGeneration = stateGeneration.get()
         _lastError.value = null
         try {
             val response = api.getMyTrips()
+            if (stateGeneration.get() != recoveryGeneration) return@withContext null
             if (response.success == false) {
                 _lastError.value = describe(response, "Unable to restore active trip")
                 return@withContext null
@@ -269,34 +287,49 @@ class TripRepository(
             val active = response.data.orEmpty()
                 .lastOrNull { isActiveTripStatus(it.status) }
             if (active == null) {
-                _backendStatus.value = null
-                _activeTripId.value = null
-                _trackingActive.value = false
-                _tripStage.value = null
+                synchronized(stateLock) {
+                    if (stateGeneration.get() != recoveryGeneration) return@withContext null
+                    _backendStatus.value = null
+                    _activeTripId.value = null
+                    _trackingActive.value = false
+                    _tripStage.value = null
+                }
                 return@withContext null
             }
             if (active.tripId.isBlank()) {
                 _lastError.value = "Backend returned an active trip without a trip ID"
                 return@withContext null
             }
-            _backendStatus.value = active
-            _activeTripId.value = active.tripId
-            _tripStage.value = tripStageForStatus(active.status)
-            if (!startTracking(active.tripId)) return@withContext null
+            if (!requestTrackingStart(active.tripId)) return@withContext null
+            val recovered = synchronized(stateLock) {
+                if (stateGeneration.get() != recoveryGeneration) return@withContext null
+                _backendStatus.value = active
+                _activeTripId.value = active.tripId
+                _tripStage.value = tripStageForStatus(active.status)
+                _trackingActive.value = true
+                locationRepository.clearQueue()
+                true
+            }
+            if (!recovered) return@withContext null
             active
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             _lastError.value = describeException(e)
             null
         }
     }
 
+    /** Clears shared trip state and invalidates any recovery request still in flight. */
     fun clear() {
-        _activeTripId.value = null
-        _trackingActive.value = false
-        _tripStage.value = null
-        _backendStatus.value = null
-        _lastError.value = null
-        locationRepository.clearQueue()
+        synchronized(stateLock) {
+            stateGeneration.incrementAndGet()
+            _activeTripId.value = null
+            _trackingActive.value = false
+            _tripStage.value = null
+            _backendStatus.value = null
+            _lastError.value = null
+            locationRepository.clearQueue()
+        }
     }
 
     private suspend fun <T> request(block: suspend () -> ApiResponse<T>): Result<T> {
@@ -360,11 +393,14 @@ class TripRepository(
         private val _backendStatus = MutableStateFlow<TripStatus?>(null)
         private val _isBusy = MutableStateFlow(false)
         private val _lastError = MutableStateFlow<String?>(null)
+        private val stateGeneration = AtomicLong(0)
+        private val stateLock = Any()
 
-        fun tripStageForStatus(status: String): TripStage? = when (status.lowercase()) {
+        /** Maps normalized backend lifecycle states to the driver's route stage. */
+        fun tripStageForStatus(status: String): TripStage? = when (status.trim().lowercase()) {
             "assigned", "accepted", "heading_to_pickup", "en_route_to_pickup" ->
                 TripStage.HEADING_TO_PICKUP
-            "picked_up", "pickup_confirmed", "shipment", "in_shipment", "shipped",
+            "arrived_at_destination", "picked_up", "pickup_confirmed", "shipment", "in_shipment", "shipped",
             "in_transit", "in-transit", "transit", "in_progress", "en_route_to_buyer",
             "en_route_to_dropoff" -> TripStage.IN_TRANSIT
             "otp_verified", "delivered", "completed" -> TripStage.DELIVERED

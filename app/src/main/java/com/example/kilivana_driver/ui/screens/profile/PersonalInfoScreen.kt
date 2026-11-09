@@ -34,10 +34,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.AuthUser
+import com.example.kilivana_driver.data.network.AuthRepository
+import com.example.kilivana_driver.data.network.SessionStore
 import com.example.kilivana_driver.ui.components.KilivanaHeader
 import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaGreen
+import com.example.kilivana_driver.ui.theme.KilivanaNotificationRed
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
@@ -57,12 +60,30 @@ fun PersonalInfoScreen(
     onBack: () -> Unit
 ) {
     var isRefreshing by remember { mutableStateOf(false) }
+    var refreshError by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val onRefreshAction = {
-        isRefreshing = true
-        coroutineScope.launch {
-            kotlinx.coroutines.delay(600)
-            isRefreshing = false
+        if (!isRefreshing) {
+            isRefreshing = true
+            coroutineScope.launch {
+                refreshError = null
+                val requestedUserId = SessionStore.userId
+                val result = AuthRepository().me()
+                val currentUserId = SessionStore.userId
+                if (result.isSuccess && currentUserId != null && currentUserId == requestedUserId) {
+                    SessionStore.save(
+                        result.getOrThrow(),
+                        SessionStore.accessToken.value,
+                        SessionStore.refreshToken.value
+                    )
+                } else if (result.isFailure) {
+                    refreshError = result.exceptionOrNull()?.message
+                        ?: "Could not refresh account details."
+                } else {
+                    refreshError = "Your account session changed. Refresh the screen to continue."
+                }
+                isRefreshing = false
+            }
         }
         Unit
     }
@@ -82,6 +103,10 @@ fun PersonalInfoScreen(
             ProfileSubHeader(title = "Personal Information", onBack = onBack)
 
             Column(modifier = Modifier.padding(16.dp)) {
+                refreshError?.let {
+                    Text(it, color = KilivanaNotificationRed, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
                 InfoCard {
                     InfoRow("Full name", user?.name)
                     InfoDivider()

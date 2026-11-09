@@ -35,7 +35,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,7 +49,6 @@ import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.JobStatus
 import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
-import kotlinx.coroutines.launch
 import com.example.kilivana_driver.ui.components.KilivanaButton
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
@@ -64,6 +62,7 @@ import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
+/** Displays job details and exposes its primary lifecycle and refresh actions. */
 @Composable
 fun JobDetailsScreen(
     job: Job,
@@ -72,26 +71,15 @@ fun JobDetailsScreen(
     onDecline: () -> Unit,
     onStartTrip: () -> Unit,
     onRefresh: () -> Unit = {},
+    isRefreshing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var showDeclineDialog by remember { mutableStateOf(false) }
 
-    var isRefreshing by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
-    val onRefreshAction = {
-        isRefreshing = true
-        coroutineScope.launch {
-            kotlinx.coroutines.delay(600)
-            onRefresh()
-            isRefreshing = false
-        }
-        Unit
-    }
-
     KilivanaPullRefreshBox(
         isRefreshing = isRefreshing,
-        onRefresh = onRefreshAction,
+        onRefresh = onRefresh,
         modifier = modifier.fillMaxSize()
     ) {
         Column(
@@ -298,7 +286,7 @@ fun JobDetailsScreen(
                     JobStatus.UNKNOWN -> {
                         KilivanaButton(
                             text = "Refresh status",
-                            onClick = onBack
+                            onClick = onRefresh
                         )
                     }
                 }

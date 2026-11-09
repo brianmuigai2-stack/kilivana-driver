@@ -51,22 +51,12 @@ fun VehicleDetailsScreen(
     isLoading: Boolean,
     needsProfile: Boolean,
     onBack: () -> Unit,
+    onRefreshProfile: () -> Unit,
     onManageImagesClick: () -> Unit
 ) {
-    var isRefreshing by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
-    val onRefreshAction = {
-        isRefreshing = true
-        coroutineScope.launch {
-            kotlinx.coroutines.delay(600)
-            isRefreshing = false
-        }
-        Unit
-    }
-
     KilivanaPullRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefreshAction,
+        isRefreshing = isLoading,
+        onRefresh = onRefreshProfile,
         modifier = Modifier.fillMaxSize()
     ) {
         Column(

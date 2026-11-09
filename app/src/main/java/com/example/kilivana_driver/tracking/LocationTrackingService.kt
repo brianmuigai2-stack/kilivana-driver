@@ -9,6 +9,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.location.Location
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkRequest
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
@@ -81,6 +85,8 @@ class LocationTrackingService : Service() {
     private val scopeJob = Job()
     private val scope = CoroutineScope(Dispatchers.IO + scopeJob)
     private val locationRepository = LocationRepository()
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val trackingConfig = com.example.kilivana_driver.data.model.TrackingConfig.DEFAULT
 
     private var fusedClient: FusedLocationProviderClient? = null
@@ -93,6 +99,18 @@ class LocationTrackingService : Service() {
         super.onCreate()
         fusedClient = LocationServices.getFusedLocationProviderClient(this)
         notificationManager = getSystemService(NotificationManager::class.java)
+        connectivityManager = getSystemService(ConnectivityManager::class.java)
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                if (isTracking) locationRepository.retryPendingUploads()
+            }
+        }
+        connectivityManager?.registerNetworkCallback(
+            NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build(),
+            networkCallback!!
+        )
         createNotificationChannel()
     }
 
@@ -104,6 +122,10 @@ class LocationTrackingService : Service() {
         when (action) {
             ACTION_START -> {
                 if (tripId != null && (!isTracking || currentTripId != tripId)) {
+                    if (currentTripId != null && currentTripId != tripId) {
+                        stopLocationUpdates()
+                        locationRepository.clearQueue()
+                    }
                     startTrackingInternal(tripId)
                 }
             }
@@ -136,6 +158,7 @@ class LocationTrackingService : Service() {
         currentTripId = null
         stopLocationUpdates()
         locationRepository.clearQueue()
+        scopeJob.cancel()
         stopForeground(true)
         stopSelf()
     }
@@ -182,6 +205,7 @@ class LocationTrackingService : Service() {
         if (!update.isEligibleForUpload(currentTripId, isTracking)) return
         scope.launch {
             val result = locationRepository.uploadNow(update)
+            if (!isTracking || currentTripId != update.tripId) return@launch
             if (result is UploadResult.Failure && result.willRetry) {
                 locationRepository.enqueueLocation(update)
             }
@@ -218,9 +242,15 @@ class LocationTrackingService : Service() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        isTracking = false
+        currentTripId = null
         stopLocationUpdates()
+        locationRepository.clearQueue()
+        networkCallback?.let { callback -> connectivityManager?.unregisterNetworkCallback(callback) }
+        networkCallback = null
+        connectivityManager = null
         scopeJob.cancel()
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

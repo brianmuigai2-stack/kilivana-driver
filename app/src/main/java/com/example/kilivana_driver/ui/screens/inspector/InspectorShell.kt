@@ -261,8 +261,9 @@ fun InspectorShell(
     }
 
     fun refreshAssignments() {
+        if (isLoading) return
+        isLoading = true
         scope.launch {
-            isLoading = true
             error = null
             try {
                 assignments = repository.getAssignments()
@@ -570,7 +571,6 @@ fun InspectorShell(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(KilivanaBackground)
-                        .padding(padding)
                 ) {
                     KilivanaHeader(
                         title = if (selectedTab == InspectorTab.HISTORY) "Inspection History" else "Inspection Queue",
@@ -705,7 +705,6 @@ fun InspectorShell(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(KilivanaBackground)
-                        .padding(padding)
                         .verticalScroll(rememberScrollState())
                 ) {
                     KilivanaHeader(

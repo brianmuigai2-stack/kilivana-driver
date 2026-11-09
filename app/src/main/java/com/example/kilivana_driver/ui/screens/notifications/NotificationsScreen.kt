@@ -35,7 +35,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,8 +47,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
-import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.AppNotification
@@ -71,6 +68,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
 private enum class NotificationFilter { ALL, UNREAD }
 
+/** Displays the existing sample notification inbox without a no-op refresh gesture. */
 @Composable
 fun NotificationsScreen(
     uiState: NotificationsUiState,
@@ -88,22 +86,7 @@ fun NotificationsScreen(
     val today = visible.filter { !it.isEarlier }
     val earlier = visible.filter { it.isEarlier }
 
-    var isRefreshing by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
-    val onRefreshAction = {
-        isRefreshing = true
-        coroutineScope.launch {
-            kotlinx.coroutines.delay(600)
-            isRefreshing = false
-        }
-        Unit
-    }
-
-    KilivanaPullRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefreshAction,
-        modifier = modifier.fillMaxSize()
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()

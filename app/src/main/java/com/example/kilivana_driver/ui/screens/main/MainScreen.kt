@@ -71,6 +71,7 @@ fun MainScreen(
     onAcceptJob: (String) -> Unit,
     onDeclineJob: (String) -> Unit,
     onRefreshJobs: () -> Unit,
+    onRefreshDashboard: () -> Unit = {},
     onPushNotificationsChange: (Boolean) -> Unit,
     onNotificationSoundChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
@@ -166,12 +167,11 @@ fun MainScreen(
         }
     }
 
-    LaunchedEffect(activeTripId, jobsState.jobs) {
+    LaunchedEffect(activeTripId, trackingActive, jobsState.jobs) {
         val currentTripId = activeTripId
-        if (!currentTripId.isNullOrBlank() && activeTripJobId == null) {
-            val matchingJob = jobsState.jobs.firstOrNull {
-                it.tripId == currentTripId || it.status == JobStatus.ACCEPTED
-            }
+        if (trackingActive && !currentTripId.isNullOrBlank() && activeTripJobId == null) {
+            val matchingJob = jobsState.jobs.firstOrNull { it.tripId == currentTripId }
+                ?: jobsState.jobs.firstOrNull { it.status == JobStatus.ACCEPTED }
             if (matchingJob != null) {
                 activeTripJobId = matchingJob.id
             }
@@ -200,6 +200,7 @@ fun MainScreen(
             isLoading = profileUiState.isLoading,
             needsProfile = profileUiState.needsProfile,
             onBack = { showVehicleDetails = false },
+            onRefreshProfile = onRefreshProfile,
             onManageImagesClick = { showProfileImages = true }
         )
 
@@ -252,7 +253,9 @@ fun MainScreen(
             onStartTrip = {
                 activeTripJobId = selectedJob.id
                 selectedJobId = null
-            }
+            },
+            onRefresh = onRefreshJobs,
+            isRefreshing = jobsState.isLoading
         )
 
         else -> Scaffold(
@@ -276,7 +279,9 @@ fun MainScreen(
                 if (showHistory) {
                     DeliveryHistoryScreen(
                         records = historyRecords,
-                        onBack = closeHistory
+                        onBack = closeHistory,
+                        isRefreshing = jobsState.isLoading,
+                        onRefreshJobs = onRefreshJobs
                     )
                 } else {
                     when (selectedTab) {
@@ -293,7 +298,8 @@ fun MainScreen(
                                 showHistory = true
                             },
                             onProfileClick = { selectedTab = BottomTab.MORE },
-                            onRefresh = onRefreshJobs
+                            onRefresh = onRefreshDashboard,
+                            isRefreshing = dashboardState.isLoading
                         )
                          BottomTab.JOBS -> JobsScreen(
                             uiState = jobsState,

@@ -219,6 +219,7 @@ class MainActivity : ComponentActivity() {
                              onAcceptJob = jobsViewModel::acceptJob,
                              onDeclineJob = jobsViewModel::declineJob,
                              onRefreshJobs = jobsViewModel::refresh,
+                            onRefreshDashboard = { dashboardViewModel.refreshJobs() },
                             onPushNotificationsChange = settingsViewModel::onPushNotificationsChange,
                             onNotificationSoundChange = settingsViewModel::onNotificationSoundChange,
                             onDarkModeChange = settingsViewModel::onDarkModeChange,

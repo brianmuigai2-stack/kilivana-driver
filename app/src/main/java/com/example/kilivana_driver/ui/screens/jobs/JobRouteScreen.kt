@@ -328,8 +328,8 @@ fun JobRouteScreen(
         if (proofFiled) onDeliveryComplete()
     }
 
-    LaunchedEffect(otpVerified) {
-        if (otpVerified) {
+    LaunchedEffect(job.id, otpVerified) {
+        if (otpVerified && showOtpDialog) {
             showOtpDialog = false
             showProofDialog = true
         }
@@ -560,7 +560,7 @@ fun JobRouteScreen(
                 tripViewModel.verifyDeliveryOtp(entered)
             },
             onDismiss = {
-                showOtpDialog = false
+                if (!isVerifyingOtp) showOtpDialog = false
             }
         )
     }
@@ -715,7 +715,7 @@ private fun OtpDialog(
     var code by remember { mutableStateOf("") }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isVerifying) onDismiss() },
         title = { Text("Confirm delivery") },
         text = {
             Column {
@@ -750,7 +750,9 @@ private fun OtpDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = KilivanaTextMuted) }
+            TextButton(onClick = onDismiss, enabled = !isVerifying) {
+                Text("Cancel", color = KilivanaTextMuted)
+            }
         }
     )
 }

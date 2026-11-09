@@ -8,9 +8,11 @@ import com.example.kilivana_driver.data.model.TripLocationRequest
 import com.example.kilivana_driver.data.model.TrackingConfig
 import com.example.kilivana_driver.data.model.UploadResult
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ChannelResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +22,7 @@ import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.ArrayDeque
 
 /**
  * Repository for uploading driver location updates to the backend.
@@ -47,6 +50,12 @@ class LocationRepository(
 
     /** Current queue size (tracked manually since Channel.size is not available). */
     private val queueSizeCounter = AtomicInteger(0)
+    private val queueLock = Any()
+    private val retryQueue = ArrayDeque<LocationUpdate>()
+    private val repositoryScope = kotlinx.coroutines.CoroutineScope(SupervisorJob() + ioDispatcher)
+    private var flushJob: Job? = null
+    private var queueGeneration = 0L
+    private var flushRequested = false
 
     /** True while a flush is in progress to avoid concurrent flushes. */
     private val isFlushing = AtomicBoolean(false)
@@ -65,20 +74,23 @@ class LocationRepository(
      * valid location fix that passes the displacement filter.
      */
     fun enqueueLocation(update: LocationUpdate) {
-        // Try to add without suspending; if full, remove oldest and retry once.
-        val result = offlineQueue.trySend(update)
-        if (!result.isSuccess) {
-            // Queue full: drop the oldest to make room for the freshest location.
-            if (offlineQueue.tryReceive().isSuccess) {
-                queueSizeCounter.decrementAndGet()
-            }
-            if (offlineQueue.trySend(update).isSuccess) {
+        synchronized(queueLock) {
+            if (!offlineQueue.trySend(update).isSuccess) {
+                // Preserve pending retries; drop the oldest queued update only.
+                if (offlineQueue.tryReceive().isSuccess) {
+                    queueSizeCounter.decrementAndGet()
+                } else if (retryQueue.isNotEmpty()) {
+                    _queueSize.value = queueSizeCounter.get()
+                    return
+                }
+                if (offlineQueue.trySend(update).isSuccess) {
+                    queueSizeCounter.incrementAndGet()
+                }
+            } else {
                 queueSizeCounter.incrementAndGet()
             }
-        } else {
-            queueSizeCounter.incrementAndGet()
+            _queueSize.value = queueSizeCounter.get()
         }
-        _queueSize.value = queueSizeCounter.get()
         scheduleFlush()
     }
 
@@ -125,64 +137,105 @@ class LocationRepository(
                     Exception(readErrorBody(e) ?: "Server responded with HTTP $code"),
                     willRetry
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Network error, timeout, etc. — retryable.
                 UploadResult.Failure(e, true)
             }
         }
 
-    /**
-     * Flushes the offline queue, uploading updates in FIFO order.
-     *
-     * Stops on the first non-retryable failure so we don't waste battery
-     * on updates the backend will never accept (e.g., 400, 401, 403).
-     * Retryable failures leave the update in the queue for the next flush.
-     */
+    /** Starts a single asynchronous drain, or records a pending drain request. */
     private fun scheduleFlush() {
-        if (isFlushing.getAndSet(true)) return // Already flushing
-
-        // Fire-and-forget on IO; the repository doesn't expose a completion signal
-        // because the caller (service/ViewModel) doesn't need to await it.
-        kotlinx.coroutines.CoroutineScope(ioDispatcher).launch {
-            flushQueue()
-            isFlushing.set(false)
+        synchronized(queueLock) {
+            if (flushJob != null || isFlushing.getAndSet(true)) {
+                flushRequested = true
+                return
+            }
+            val generation = queueGeneration
+            flushRequested = false
+            flushJob = repositoryScope.launch {
+                try {
+                    flushQueue(generation)
+                } finally {
+                    synchronized(queueLock) {
+                        isFlushing.set(false)
+                        flushJob = null
+                        if ((queueGeneration != generation || flushRequested) &&
+                            queueSizeCounter.get() > 0
+                        ) {
+                            scheduleFlush()
+                        }
+                    }
+                }
+            }
         }
     }
 
-    private suspend fun flushQueue() {
+    /**
+     * Uploads buffered updates in FIFO order, retaining transient failures without suspending.
+     * Stops on a non-retryable failure or after retaining one transient failure for a later retry.
+     */
+    private suspend fun flushQueue(generation: Long) {
         while (true) {
-            val result = offlineQueue.receiveCatching()
-            if (result.isClosed) break
-            val update = result.getOrNull() ?: continue
-            val uploadResult = uploadNow(update)
+            val update = synchronized(queueLock) {
+                if (queueGeneration != generation) return
+                if (retryQueue.isNotEmpty()) retryQueue.removeFirst()
+                else offlineQueue.tryReceive().getOrNull()
+            } ?: return
+            val uploadResult = try {
+                uploadNow(update)
+            } catch (e: CancellationException) {
+                synchronized(queueLock) {
+                    queueSizeCounter.decrementAndGet()
+                    _queueSize.value = queueSizeCounter.get().coerceAtLeast(0)
+                }
+                throw e
+            }
             when (uploadResult) {
                 is UploadResult.Success -> {
-                    queueSizeCounter.decrementAndGet()
-                    _queueSize.value = queueSizeCounter.get()
+                    synchronized(queueLock) {
+                        queueSizeCounter.decrementAndGet()
+                        _queueSize.value = queueSizeCounter.get().coerceAtLeast(0)
+                    }
                     continue // Next update
                 }
                 is UploadResult.Failure -> {
-                    if (uploadResult.willRetry) {
-                        // Put it back at the front for the next flush attempt.
-                        offlineQueue.send(update)
-                    } else {
-                        // Non-retryable (e.g., 400, 401, 403) — drop it and stop.
-                        queueSizeCounter.decrementAndGet()
+                    synchronized(queueLock) {
+                        if (queueGeneration != generation) {
+                            queueSizeCounter.decrementAndGet()
+                        } else if (uploadResult.willRetry) {
+                            retryQueue.addFirst(update)
+                        } else {
+                            queueSizeCounter.decrementAndGet()
+                        }
+                        _queueSize.value = queueSizeCounter.get().coerceAtLeast(0)
                     }
-                    _queueSize.value = queueSizeCounter.get()
                     return // Stop flushing; will retry later
                 }
             }
         }
     }
 
+    /** Retries buffered updates when connectivity returns. */
+    fun retryPendingUploads() {
+        scheduleFlush()
+    }
+
     /** Clears the offline queue (e.g., when tracking ends or session expires). */
     fun clearQueue() {
-        while (offlineQueue.tryReceive().isSuccess) {
-            queueSizeCounter.decrementAndGet()
+        synchronized(queueLock) {
+            queueGeneration++
+            while (offlineQueue.tryReceive().isSuccess) {
+                queueSizeCounter.decrementAndGet()
+            }
+            while (retryQueue.isNotEmpty()) {
+                retryQueue.removeFirst()
+                queueSizeCounter.decrementAndGet()
+            }
+            _queueSize.value = queueSizeCounter.get().coerceAtLeast(0)
+            flushJob?.cancel()
         }
-        queueSizeCounter.set(0)
-        _queueSize.value = 0
     }
 
     /** Checks if an HTTP error from the backend is retryable. */
