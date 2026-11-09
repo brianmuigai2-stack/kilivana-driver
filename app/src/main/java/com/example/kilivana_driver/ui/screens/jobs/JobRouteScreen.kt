@@ -131,6 +131,9 @@ fun JobRouteScreen(
     val isSubmittingProof by tripViewModel.isSubmittingProof.collectAsStateWithLifecycle()
     val proofError by tripViewModel.proofError.collectAsStateWithLifecycle()
     val proofFiled by tripViewModel.proofFiled.collectAsStateWithLifecycle()
+    val isVerifyingOtp by tripViewModel.isVerifyingOtp.collectAsStateWithLifecycle()
+    val otpError by tripViewModel.otpError.collectAsStateWithLifecycle()
+    val otpVerified by tripViewModel.otpVerified.collectAsStateWithLifecycle()
     var evidencePhotoUri by remember(job.id) { mutableStateOf<Uri?>(null) }
     val pickEvidencePhoto = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -320,11 +323,16 @@ fun JobRouteScreen(
 
     var showOtpDialog by remember { mutableStateOf(false) }
     var showProofDialog by remember { mutableStateOf(false) }
-    var otpError by remember { mutableStateOf<String?>(null) }
-    var deliveryOtp by remember { mutableStateOf("") }
 
     LaunchedEffect(proofFiled) {
         if (proofFiled) onDeliveryComplete()
+    }
+
+    LaunchedEffect(otpVerified) {
+        if (otpVerified) {
+            showOtpDialog = false
+            showProofDialog = true
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -402,7 +410,8 @@ fun JobRouteScreen(
                 }
             }
 
-            if (lastError != null) {
+            val tripError = proofError ?: lastError
+            if (tripError != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier
@@ -421,7 +430,7 @@ fun JobRouteScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = lastError!!,
+                        text = tripError,
                         color = KilivanaNotificationRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
@@ -521,14 +530,23 @@ fun JobRouteScreen(
                     enabled = !isBusy
                 )
                 UiTripStage.IN_TRANSIT -> KilivanaButton(
-                    text = "Confirm Delivery (OTP)",
+                    text = if (otpVerified) "Upload Delivery Evidence" else "Confirm Delivery (OTP)",
                     onClick = {
-                        otpError = null
-                        showOtpDialog = true
+                        if (otpVerified) {
+                            showProofDialog = true
+                        } else {
+                            showOtpDialog = true
+                        }
                     },
-                    enabled = !isBusy
+                    enabled = !isBusy && !isSubmittingProof
                 )
-                UiTripStage.DELIVERED -> Unit
+                UiTripStage.DELIVERED -> if (otpVerified && !proofFiled) {
+                    KilivanaButton(
+                        text = "Upload Delivery Evidence",
+                        onClick = { showProofDialog = true },
+                        enabled = !isSubmittingProof
+                    )
+                }
             }
         }
     }
@@ -537,19 +555,12 @@ fun JobRouteScreen(
         OtpDialog(
             jobId = job.id,
             error = otpError,
+            isVerifying = isVerifyingOtp,
             onConfirm = { entered ->
-                if (entered.isNotBlank()) {
-                    deliveryOtp = entered
-                    showOtpDialog = false
-                    otpError = null
-                    showProofDialog = true
-                } else {
-                    otpError = "Enter the buyer's delivery code."
-                }
+                tripViewModel.verifyDeliveryOtp(entered)
             },
             onDismiss = {
                 showOtpDialog = false
-                otpError = null
             }
         )
     }
@@ -565,18 +576,17 @@ fun JobRouteScreen(
                 )
             },
             onTakePhoto = { takeEvidencePhoto.launch(null) },
+            onRemovePhoto = { evidencePhotoUri = null },
             onSubmit = { recipientName, signatureUrl ->
                 tripViewModel.fileDeliveryProof(
-                    otp = deliveryOtp,
                     recipientName = recipientName,
-                    photoUrl = evidencePhotoUri?.toString().orEmpty(),
+                    photoUri = evidencePhotoUri,
                     signatureUrl = signatureUrl
                 )
             },
             onDismiss = {
                 if (!isSubmittingProof) {
                     showProofDialog = false
-                    deliveryOtp = ""
                 }
             }
         )
@@ -698,6 +708,7 @@ private fun createCircleBitmap(
 private fun OtpDialog(
     jobId: String,
     error: String?,
+    isVerifying: Boolean,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -709,7 +720,7 @@ private fun OtpDialog(
         text = {
             Column {
                 Text(
-                    text = "Ask the buyer for their delivery code. You'll add delivery evidence next.",
+                    text = "Enter the delivery code sent to the buyer. After it is verified, you can upload delivery evidence.",
                     color = KilivanaTextMuted,
                     fontSize = 14.sp
                 )
@@ -730,8 +741,12 @@ private fun OtpDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(code) }) {
-                Text("Confirm", color = KilivanaGreen, fontWeight = FontWeight.Bold)
+            TextButton(onClick = { onConfirm(code) }, enabled = !isVerifying) {
+                Text(
+                    if (isVerifying) "Verifying..." else "Confirm",
+                    color = KilivanaGreen,
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         dismissButton = {
@@ -747,6 +762,7 @@ private fun DeliveryProofDialog(
     photoUri: Uri?,
     onPickPhoto: () -> Unit,
     onTakePhoto: () -> Unit,
+    onRemovePhoto: () -> Unit,
     onSubmit: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -758,7 +774,7 @@ private fun DeliveryProofDialog(
         text = {
             Column {
                 Text(
-                    text = "Provide the recipient name or attach a photo/signature proof. The delivery code will be verified on submission.",
+                    text = "The delivery code was verified. A photo is optional; add the recipient name or attach photo/signature evidence.",
                     color = KilivanaTextMuted,
                     fontSize = 14.sp
                 )
@@ -783,6 +799,9 @@ private fun DeliveryProofDialog(
                             .height(140.dp)
                             .clip(RoundedCornerShape(12.dp))
                     )
+                    TextButton(onClick = onRemovePhoto, enabled = !isSubmitting) {
+                        Text("Remove photo", color = KilivanaTextMuted)
+                    }
                 }
                 if (error != null) {
                     Spacer(modifier = Modifier.height(6.dp))
@@ -796,7 +815,7 @@ private fun DeliveryProofDialog(
                 enabled = !isSubmitting
             ) {
                 Text(
-                    text = if (isSubmitting) "Submitting..." else "Submit proof",
+                    text = if (isSubmitting) "Uploading & submitting..." else "Submit proof",
                     color = KilivanaGreen,
                     fontWeight = FontWeight.Bold
                 )

@@ -38,7 +38,7 @@ data class DeliveryJob(
      * specified. Declaring it non-nullable with a default would throw on an
      * explicit `null`: kotlinx.serialization only applies a default when the
      * key is *absent*, not when it's present-but-null. See DriverImage.assetId
-     * for the same documented rationale.
+     * for the same documented rationale.5
      */
     val quantity: Int? = null,
     val payoutAmount: Double = 0.0,
@@ -94,7 +94,8 @@ data class DeliveryJob(
         status = mapStatus(status),
         isNew = false,
         updatedAt = updatedAt,
-        tripId = tripId
+        tripId = tripId,
+        backendStatus = status
     )
 
     /** Maps known backend states; unrecognized or absent states remain non-actionable. */
@@ -103,10 +104,11 @@ data class DeliveryJob(
         "waiting_for_driver", "driver_assigned" -> JobStatus.AVAILABLE
 
         "accepted", "accepted_by_driver", "picked_up", "pickup_confirmed",
-        "in_transit", "in_progress", "en_route", "en_route_to_buyer",
+        "shipment", "in_shipment", "shipped", "in_transit", "in-transit",
+        "transit", "in_progress", "en_route", "en_route_to_buyer",
         "en_route_to_dropoff", "on_the_way", "traveling" -> JobStatus.ACCEPTED
 
-        "completed", "delivered", "finished", "success" -> JobStatus.COMPLETED
+        "otp_verified", "completed", "delivered", "finished", "success" -> JobStatus.COMPLETED
         "cancelled", "rejected", "canceled", "failed", "declined" -> JobStatus.CANCELLED
 
         else -> JobStatus.UNKNOWN

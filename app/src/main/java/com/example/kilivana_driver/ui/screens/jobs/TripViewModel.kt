@@ -1,6 +1,7 @@
 package com.example.kilivana_driver.ui.screens.jobs
 
 import android.app.Application
+import android.net.Uri
 import android.location.Location
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -65,6 +66,15 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     private val _isSubmittingProof = MutableStateFlow(false)
     val isSubmittingProof: StateFlow<Boolean> = _isSubmittingProof.asStateFlow()
 
+    private val _isVerifyingOtp = MutableStateFlow(false)
+    val isVerifyingOtp: StateFlow<Boolean> = _isVerifyingOtp.asStateFlow()
+
+    private val _otpError = MutableStateFlow<String?>(null)
+    val otpError: StateFlow<String?> = _otpError.asStateFlow()
+
+    private val _otpVerified = MutableStateFlow(false)
+    val otpVerified: StateFlow<Boolean> = _otpVerified.asStateFlow()
+
     private val _proofError = MutableStateFlow<String?>(null)
     val proofError: StateFlow<String?> = _proofError.asStateFlow()
 
@@ -97,8 +107,12 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     fun initialize(job: Job) {
         _job = job
         _isSubmittingProof.value = false
+        _isVerifyingOtp.value = false
+        _otpError.value = null
+        _otpVerified.value = false
         _proofError.value = null
         _proofFiled.value = false
+        tripRepository.restoreSavedStatus(job.backendStatus, job.tripId)
         _targetGeoPoint = GeoPoint(job.pickupLat, job.pickupLon)
         _routePoints.value = null
         _usingEstimatedRoute.value = false
@@ -123,12 +137,15 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Starts tracking for the current job (driver tapped "Start Trip"). */
     fun startTrip() {
-        val tripId = _job?.tripId
-        if (tripId.isNullOrBlank()) {
-            _proofError.value = "This accepted job has no trip ID. Refresh jobs or contact dispatch."
-            return
-        }
+        val job = _job ?: return
+        _proofError.value = null
         viewModelScope.launch {
+            val tripId = resolveTripId(job)
+            if (tripId == null) {
+                _proofError.value = tripRepository.lastError.value
+                    ?: "Could not find a trip for this job. Refresh jobs or contact dispatch."
+                return@launch
+            }
             if (!tripRepository.startTracking(tripId)) {
                 _proofError.value = tripRepository.lastError.value ?: "Could not start delivery tracking."
             }
@@ -139,11 +156,14 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
     /** Advances to IN_TRANSIT stage (driver tapped "Mark as Picked Up"). */
     fun markPickedUp() {
         val job = _job ?: return
-        val tripId = job.tripId ?: run {
-            _proofError.value = "This job has no trip ID."
-            return
-        }
+        _proofError.value = null
         viewModelScope.launch {
+            val tripId = resolveTripId(job)
+            if (tripId == null) {
+                _proofError.value = tripRepository.lastError.value
+                    ?: "Could not find a trip for this job. Refresh jobs or contact dispatch."
+                return@launch
+            }
             val result = tripRepository.confirmPickup(tripId)
             if (result.isFailure) {
                 _proofError.value = result.exceptionOrNull()?.message ?: "Could not confirm pickup."
@@ -158,11 +178,58 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Files proof with the buyer's OTP; the backend validates both together. */
+    private suspend fun resolveTripId(job: Job): String? =
+        job.tripId?.takeIf { it.isNotBlank() }
+            ?: tripRepository.activeTripId.value?.takeIf { it.isNotBlank() }
+            ?: tripRepository.resolveTripIdForJob(job.id)
+
+
+    /** Validates the buyer's OTP before moving on to evidence collection. */
+    fun verifyDeliveryOtp(otp: String) {
+        if (_isVerifyingOtp.value || _otpVerified.value) return
+        if (otp.isBlank()) {
+            _otpError.value = "Enter the buyer's delivery code."
+            return
+        }
+        val job = _job ?: return
+        viewModelScope.launch {
+            _isVerifyingOtp.value = true
+            _otpError.value = null
+            val jobId = job.id.toLongOrNull()
+            if (jobId == null) {
+                _otpError.value = "This job has an invalid ID."
+                _isVerifyingOtp.value = false
+                return@launch
+            }
+            val preparedJob = jobsRepository.prepareJobForOtpVerification(jobId)
+            if (preparedJob.isFailure) {
+                _otpError.value = preparedJob.exceptionOrNull()?.message
+                    ?: "Could not prepare the job for OTP verification."
+                _isVerifyingOtp.value = false
+                return@launch
+            }
+            _job = job.copy(backendStatus = preparedJob.getOrThrow().status)
+            val result = jobsRepository.verifyOtp(jobId, otp.trim())
+            _isVerifyingOtp.value = false
+            result.fold(
+                onSuccess = { updatedJob ->
+                    tripRepository.restoreSavedStatus(
+                        updatedJob.status,
+                        updatedJob.tripId ?: tripRepository.activeTripId.value
+                    )
+                    _otpVerified.value = true
+                },
+                onFailure = { error ->
+                    _otpError.value = error.message ?: "Could not verify the delivery code."
+                }
+            )
+        }
+    }
+
+    /** Uploads delivery evidence after the backend has accepted the buyer's OTP. */
     fun fileDeliveryProof(
-        otp: String,
         recipientName: String,
-        photoUrl: String,
+        photoUri: Uri?,
         signatureUrl: String
     ) {
         if (_isSubmittingProof.value) return
@@ -171,16 +238,11 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
             _proofError.value = "This job has an invalid ID."
             return
         }
-        val tripId = _job?.tripId
-        if (tripId.isNullOrBlank()) {
-            _proofError.value = "This job has no trip ID."
+        if (!_otpVerified.value) {
+            _proofError.value = "Verify the buyer's delivery code before submitting evidence."
             return
         }
-        if (otp.isBlank()) {
-            _proofError.value = "Enter the buyer's delivery code."
-            return
-        }
-        if (recipientName.isBlank() && photoUrl.isBlank() && signatureUrl.isBlank()) {
+        if (recipientName.isBlank() && photoUri == null && signatureUrl.isBlank()) {
             _proofError.value = "Add recipient name, photo, or signature as delivery evidence."
             return
         }
@@ -188,13 +250,42 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isSubmittingProof.value = true
             _proofError.value = null
+            val job = _job
+            if (job == null) {
+                _isSubmittingProof.value = false
+                _proofError.value = "Could not find the active delivery."
+                return@launch
+            }
+            val tripId = resolveTripId(job)
+            if (tripId == null) {
+                _proofError.value = tripRepository.lastError.value
+                    ?: "Could not find the active delivery."
+                _isSubmittingProof.value = false
+                return@launch
+            }
+            val photoUrl = if (photoUri != null) {
+                val upload = tripRepository.uploadProofPhoto(
+                    tripId = tripId,
+                    contentResolver = getApplication<Application>().contentResolver,
+                    uri = photoUri,
+                    cacheDir = getApplication<Application>().cacheDir
+                )
+                upload.getOrElse { error ->
+                    _proofError.value = error.message
+                        ?: "Could not upload the delivery photo. Please retry."
+                    _isSubmittingProof.value = false
+                    return@launch
+                }
+            } else {
+                null
+            }
             val proof = ProofOfDelivery(
                 logisticsJobId = jobId,
                 recipientName = recipientName.trim().takeIf { it.isNotEmpty() },
-                photoUrl = photoUrl.trim().takeIf { it.isNotEmpty() },
+                photoUrl = photoUrl,
                 signatureUrl = signatureUrl.trim().takeIf { it.isNotEmpty() }
             )
-            val result = tripRepository.fileProof(tripId, proof, otp.trim())
+            val result = tripRepository.fileProof(tripId, proof)
             _isSubmittingProof.value = false
             result.fold(
                 onSuccess = {

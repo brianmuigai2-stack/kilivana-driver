@@ -19,15 +19,22 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.DriverProfile
+import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
+import kotlinx.coroutines.launch
 
 /**
  * Read-only view of the driver's vehicle and licence record.
@@ -46,86 +53,103 @@ fun VehicleDetailsScreen(
     onBack: () -> Unit,
     onManageImagesClick: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(KilivanaBackground)
-            .verticalScroll(rememberScrollState())
-            .navigationBarsPadding()
+    var isRefreshing by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val onRefreshAction = {
+        isRefreshing = true
+        coroutineScope.launch {
+            kotlinx.coroutines.delay(600)
+            isRefreshing = false
+        }
+        Unit
+    }
+
+    KilivanaPullRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefreshAction,
+        modifier = Modifier.fillMaxSize()
     ) {
-        ProfileSubHeader(title = "Vehicle Details", onBack = onBack)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(KilivanaBackground)
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+        ) {
+            ProfileSubHeader(title = "Vehicle Details", onBack = onBack)
 
-        Column(modifier = Modifier.padding(16.dp)) {
-            if (isLoading && profile == null) {
-                CircularProgressIndicator(color = KilivanaTextPrimary)
+            Column(modifier = Modifier.padding(16.dp)) {
+                if (isLoading && profile == null) {
+                    CircularProgressIndicator(color = KilivanaTextPrimary)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                if (needsProfile) {
+                    NoVehicleOnFileNotice()
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                InfoCard {
+                    InfoRow("Licence number", profile?.licenseNumber)
+                    InfoDivider()
+                    InfoRow("Vehicle number", profile?.vehicleNumber)
+                    InfoDivider()
+                    InfoRow("Vehicle type", profile?.vehicleType?.replaceFirstChar { it.uppercase() })
+                    InfoDivider()
+                    InfoRow("Vehicle details", profile?.vehicleDetails)
+                    InfoDivider()
+                    InfoRow(
+                        "Availability",
+                        profile?.availabilityStatus?.replaceFirstChar { it.uppercase() }
+                    )
+                    InfoDivider()
+                    InfoRow("Profile ID", profile?.id?.takeIf { it > 0 }?.toString())
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
-            }
 
-            if (needsProfile) {
-                NoVehicleOnFileNotice()
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            InfoCard {
-                InfoRow("Licence number", profile?.licenseNumber)
-                InfoDivider()
-                InfoRow("Vehicle number", profile?.vehicleNumber)
-                InfoDivider()
-                InfoRow("Vehicle type", profile?.vehicleType?.replaceFirstChar { it.uppercase() })
-                InfoDivider()
-                InfoRow("Vehicle details", profile?.vehicleDetails)
-                InfoDivider()
-                InfoRow(
-                    "Availability",
-                    profile?.availabilityStatus?.replaceFirstChar { it.uppercase() }
-                )
-                InfoDivider()
-                InfoRow("Profile ID", profile?.id?.takeIf { it > 0 }?.toString())
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            InfoCard {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onManageImagesClick)
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Licence & vehicle photos",
-                            color = KilivanaTextPrimary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Upload or remove your documents",
-                            color = KilivanaTextMuted,
-                            fontSize = 13.sp
+                InfoCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onManageImagesClick)
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Licence & vehicle photos",
+                                color = KilivanaTextPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Upload or remove your documents",
+                                color = KilivanaTextMuted,
+                                fontSize = 13.sp
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Outlined.ChevronRight,
+                            contentDescription = null,
+                            tint = KilivanaTextMuted,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                    Icon(
-                        imageVector = Icons.Outlined.ChevronRight,
-                        contentDescription = null,
-                        tint = KilivanaTextMuted,
-                        modifier = Modifier.size(20.dp)
-                    )
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Your licence and vehicle details are set up by your Kilivana admin. " +
+                        "You can add photos of your licence and vehicle here; if something below " +
+                        "is missing, contact your admin to have it added.",
+                    color = KilivanaTextMuted,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp
+                )
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Your licence and vehicle details are set up by your Kilivana admin. " +
-                    "You can add photos of your licence and vehicle here; if something below " +
-                    "is missing, contact your admin to have it added.",
-                color = KilivanaTextMuted,
-                fontSize = 13.sp,
-                lineHeight = 19.sp
-            )
         }
     }
 }

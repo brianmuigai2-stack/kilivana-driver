@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.kilivana_driver.BuildConfig
 import com.example.kilivana_driver.ui.components.KilivanaHeader
+import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
 import com.example.kilivana_driver.ui.theme.KilivanaError
@@ -76,6 +77,8 @@ import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -114,14 +117,31 @@ fun SettingsScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(KilivanaBackground)
-            .verticalScroll(rememberScrollState())
-            .navigationBarsPadding()
+    var isRefreshing by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val onRefreshAction = {
+        isRefreshing = true
+        coroutineScope.launch {
+            kotlinx.coroutines.delay(600)
+            onTestApiConnection()
+            isRefreshing = false
+        }
+        Unit
+    }
+
+    KilivanaPullRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefreshAction,
+        modifier = modifier.fillMaxSize()
     ) {
-        KilivanaHeader(title = "Settings", onBack = onBack)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(KilivanaBackground)
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+        ) {
+            KilivanaHeader(title = "Settings", onBack = onBack)
 
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             SectionLabel("Preferences")
@@ -258,6 +278,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
+}
 
     if (showLanguageDialog) {
         LanguageDialog(

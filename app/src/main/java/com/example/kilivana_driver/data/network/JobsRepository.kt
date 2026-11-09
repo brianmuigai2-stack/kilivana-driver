@@ -123,6 +123,44 @@ class JobsRepository(
         }
 
     /**
+     * Ensures the logistics job is in a status accepted by OTP verification.
+     * A picked-up job is advanced to in_transit before the OTP endpoint is called.
+     */
+    suspend fun prepareJobForOtpVerification(jobId: Long): Result<DeliveryJob> =
+        withContext(ioDispatcher) {
+            val current = getJob(jobId).getOrElse {
+                return@withContext Result.failure(it)
+            }
+            when (current.status.normalizedJobStatus()) {
+                "IN_TRANSIT", "ARRIVED_AT_DESTINATION" -> Result.success(current)
+                "PICKED_UP" -> {
+                    val updated = updateJobStatus(jobId, "in_transit").getOrElse {
+                        return@withContext Result.failure(it)
+                    }
+                    if (updated.status.normalizedJobStatus() in OTP_ELIGIBLE_JOB_STATUSES) {
+                        Result.success(updated)
+                    } else {
+                        Result.failure(
+                            JobsException(
+                                JobsErrorType.OTHER,
+                                "The job status did not advance to IN_TRANSIT. Current status: " +
+                                    (updated.status ?: "unknown")
+                            )
+                        )
+                    }
+                }
+                else -> Result.failure(
+                    JobsException(
+                        JobsErrorType.OTHER,
+                        "Cannot verify delivery OTP while job status is " +
+                            (current.status ?: "unknown") +
+                            ". The job must be PICKED_UP, IN_TRANSIT, or ARRIVED_AT_DESTINATION."
+                    )
+                )
+            }
+        }
+
+    /**
      * Cancels a job with a reason (driver declined or cancelled mid-trip).
      *
      * PUT /api/v1/logistics/jobs/{id}/cancel  body: plain string reason
@@ -221,5 +259,12 @@ class JobsRepository(
         val code = error?.code?.takeIf { it.isNotBlank() }
         val details = error?.details?.takeIf { it.isNotBlank() }
         return listOfNotNull(code, details).joinToString(": ").ifBlank { fallback }
+    }
+
+    private fun String?.normalizedJobStatus(): String =
+        this?.trim()?.uppercase()?.replace('-', '_').orEmpty()
+
+    private companion object {
+        val OTP_ELIGIBLE_JOB_STATUSES = setOf("IN_TRANSIT", "ARRIVED_AT_DESTINATION")
     }
 }

@@ -3,12 +3,16 @@ package com.example.kilivana_driver.data.network
 import com.example.kilivana_driver.data.model.ApiResponse
 import com.example.kilivana_driver.data.model.DeliveryJob
 import com.example.kilivana_driver.data.model.ProofOfDelivery
+import com.example.kilivana_driver.data.model.ProofPhotoUpload
 import com.example.kilivana_driver.data.model.ReportLocationResponseData
 import com.example.kilivana_driver.data.model.TripLocationRequest
 import com.example.kilivana_driver.data.model.TripStatus
+import okhttp3.MultipartBody
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.POST
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -52,9 +56,16 @@ interface TripApi {
     @POST("api/v1/trips/{tripId}/proof")
     suspend fun fileProof(
         @Path("tripId") tripId: String,
-        @Query("otp") otp: String,
+        @Query("otp") otp: String?,
         @Body body: ProofOfDelivery
     ): ApiResponse<ProofOfDelivery>
+
+    @Multipart
+    @POST("api/v1/trips/{tripId}/proof-photo")
+    suspend fun uploadProofPhoto(
+        @Path("tripId") tripId: String,
+        @Part image: MultipartBody.Part
+    ): ApiResponse<ProofPhotoUpload>
 
     @GET("api/v1/trips/active")
     suspend fun getActiveTrips(): ApiResponse<List<DeliveryJob>>

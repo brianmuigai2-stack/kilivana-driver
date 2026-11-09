@@ -55,7 +55,9 @@ data class Job(
     val isNew: Boolean = false,
     val updatedAt: String = "",
     /** Backend trip identifier returned after the driver accepts this job. */
-    val tripId: String? = null
+    val tripId: String? = null,
+    /** Raw lifecycle status from the backend, retained to restore the active trip stage. */
+    val backendStatus: String? = null
 ) {
     val distanceLabel: String
         get() = if (distanceKm > 0.0) {

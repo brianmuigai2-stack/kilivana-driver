@@ -249,6 +249,7 @@ class MainActivity : ComponentActivity() {
                             onDeleteImage = profileViewModel::deleteImage,
                             onDeletePhoto = profileViewModel::deletePrimaryPhoto,
                             onDismissUploadMessage = profileViewModel::dismissMessage,
+                            onRefreshProfile = profileViewModel::refresh,
                             onSetSystemBars = { dark, green -> setSystemBars(dark, green) }
                         )
 

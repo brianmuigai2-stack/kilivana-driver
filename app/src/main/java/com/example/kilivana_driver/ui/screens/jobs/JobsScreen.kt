@@ -74,6 +74,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
+import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
 import java.util.Locale
 
 /** Renders the selected job tab with loading, empty or error states, forwarding user actions to the caller. */
@@ -88,11 +89,16 @@ fun JobsScreen(
 ) {
     val visibleJobs = uiState.visibleJobs
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(KilivanaBackground)
+    KilivanaPullRefreshBox(
+        isRefreshing = uiState.isLoading,
+        onRefresh = onRefresh,
+        modifier = modifier.fillMaxSize()
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(KilivanaBackground)
+        ) {
         KilivanaStatusBarScrim()
         JobsHeader(onFilterClick = onFilterClick, onRefresh = onRefresh)
 
@@ -156,6 +162,7 @@ fun JobsScreen(
             }
         }
     }
+}
 }
 
 /** Shows the jobs title with refresh and filter actions. */

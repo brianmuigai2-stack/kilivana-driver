@@ -71,6 +71,7 @@ import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.example.kilivana_driver.data.model.Driver
+import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
 import com.example.kilivana_driver.ui.theme.KilivanaAmber
 import com.example.kilivana_driver.ui.theme.KilivanaAmberTint
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
@@ -103,19 +104,25 @@ fun ProfileScreen(
     onHelpClick: () -> Unit = {},
     onLogout: () -> Unit,
     onDeletePhoto: () -> Unit = {},
+    onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showDeletePhotoDialog by remember { mutableStateOf(false) }
     var viewingProfileImage by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(KilivanaBackground)
-            .verticalScroll(rememberScrollState())
-            .navigationBarsPadding()
+    KilivanaPullRefreshBox(
+        isRefreshing = uiState.isLoading,
+        onRefresh = onRefresh,
+        modifier = modifier.fillMaxSize()
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(KilivanaBackground)
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+        ) {
         // No statusBarsPadding here: the green header paints behind the
         // status bar, and only the icons/text inside it are pushed down.
         ProfileHeader(
@@ -290,6 +297,7 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
+}
 
     val profileImageUrl = uiState.primaryImage?.url
     if (viewingProfileImage && !profileImageUrl.isNullOrBlank()) {

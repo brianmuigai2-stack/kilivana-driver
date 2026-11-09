@@ -64,6 +64,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
+import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -97,6 +98,7 @@ fun DashboardScreen(
     onMapRouteClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Today's date, computed once per composition. Note: a driver
@@ -106,13 +108,18 @@ fun DashboardScreen(
         SimpleDateFormat("EEE, d MMM", Locale.getDefault()).format(Date())
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(KilivanaWhite)
-            .verticalScroll(rememberScrollState())
+    KilivanaPullRefreshBox(
+        isRefreshing = uiState.isLoading,
+        onRefresh = onRefresh,
+        modifier = modifier.fillMaxSize()
     ) {
-        // Full-bleed green header (paints behind the status bar, like Profile)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(KilivanaWhite)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // Full-bleed green header (paints behind the status bar, like Profile)
         DashboardHeader(
             uiState = uiState,
             dateLabel = dateLabel,
@@ -169,6 +176,7 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
+}
 }
 
 /**

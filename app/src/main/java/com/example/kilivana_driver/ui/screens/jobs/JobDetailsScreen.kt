@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.JobStatus
+import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
+import kotlinx.coroutines.launch
 import com.example.kilivana_driver.ui.components.KilivanaButton
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
@@ -68,17 +71,35 @@ fun JobDetailsScreen(
     onAccept: () -> Unit,
     onDecline: () -> Unit,
     onStartTrip: () -> Unit,
+    onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var showDeclineDialog by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(KilivanaBackground)
-            .navigationBarsPadding()
+    var isRefreshing by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val onRefreshAction = {
+        isRefreshing = true
+        coroutineScope.launch {
+            kotlinx.coroutines.delay(600)
+            onRefresh()
+            isRefreshing = false
+        }
+        Unit
+    }
+
+    KilivanaPullRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefreshAction,
+        modifier = modifier.fillMaxSize()
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(KilivanaBackground)
+                .navigationBarsPadding()
+        ) {
         KilivanaStatusBarScrim()
 
         // Top bar
@@ -284,6 +305,7 @@ fun JobDetailsScreen(
             }
         }
     }
+}
 
     if (showDeclineDialog) {
         AlertDialog(

@@ -86,6 +86,7 @@ fun MainScreen(
     onPickImage: () -> Unit = {},
     onDeleteImage: (Long) -> Unit = {},
     onDismissUploadMessage: () -> Unit = {},
+    onRefreshProfile: () -> Unit = {},
     onSetSystemBars: (darkHeader: Boolean, greenBand: Boolean) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
@@ -291,7 +292,8 @@ fun MainScreen(
                                 selectedTab = BottomTab.JOBS
                                 showHistory = true
                             },
-                            onProfileClick = { selectedTab = BottomTab.MORE }
+                            onProfileClick = { selectedTab = BottomTab.MORE },
+                            onRefresh = onRefreshJobs
                         )
                          BottomTab.JOBS -> JobsScreen(
                             uiState = jobsState,
@@ -319,7 +321,8 @@ fun MainScreen(
                             onChangePasswordClick = onOpenResetPassword,
                             onNotificationsClick = { showNotifications = true },
                             onHelpClick = { /* TODO */ },
-                            onLogout = onLogout
+                            onLogout = onLogout,
+                            onRefresh = onRefreshProfile
                         )
                     }
                 }

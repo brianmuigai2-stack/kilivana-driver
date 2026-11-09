@@ -32,7 +32,8 @@ data class DashboardUiState(
     val hasUnreadNotifications: Boolean = false,
     val recentActivity: List<ActivityItem> = emptyList(),
     /** Primary profile image URL, or blank to fall back to initials. */
-    val photoUrl: String = ""
+    val photoUrl: String = "",
+    val isLoading: Boolean = false
 )
 
 class DashboardViewModel(
@@ -66,6 +67,7 @@ class DashboardViewModel(
     fun refreshJobs(driverId: Long? = SessionStore.userId) {
         val id = driverId ?: return
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
             val result = jobsRepository.getJobsByDriver(id)
             if (result.isSuccess) {
                 val deliveryJobs = result.getOrNull().orEmpty()
@@ -75,11 +77,14 @@ class DashboardViewModel(
 
                 _uiState.update {
                     it.copy(
+                        isLoading = false,
                         deliveriesAssigned = acceptedJobs.size,
                         estimatedTransit = formatTransitMinutes(totalEstimatedMinutes),
                         recentActivity = buildRecentActivity(completedJobs)
                     )
                 }
+            } else {
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }

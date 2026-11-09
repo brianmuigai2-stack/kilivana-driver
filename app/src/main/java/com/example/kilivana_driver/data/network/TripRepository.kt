@@ -1,6 +1,9 @@
 package com.example.kilivana_driver.data.network
 
+import android.content.ContentResolver
+import android.net.Uri
 import com.example.kilivana_driver.data.model.ApiResponse
+import com.example.kilivana_driver.data.model.DeliveryJob
 import com.example.kilivana_driver.data.model.ProofOfDelivery
 import com.example.kilivana_driver.data.model.TripStage
 import com.example.kilivana_driver.data.model.TripStatus
@@ -11,7 +14,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import retrofit2.HttpException
+import java.io.File
+import java.net.URI
 
 /**
  * Coordinates the backend-owned trip lifecycle. The trip ID comes from the
@@ -74,7 +82,9 @@ class TripRepository(
     /** Records pickup on the backend before the UI changes to the buyer leg. */
     suspend fun confirmPickup(tripId: String): Result<TripStatus> = withContext(ioDispatcher) {
         val result = request { api.updateStatus(tripId, "picked_up") }
-        val status = result.getOrNull() ?: return@withContext result
+        val status = result.getOrNull()?.let { response ->
+            response.copy(tripId = response.tripId.ifBlank { tripId })
+        } ?: return@withContext result
         if (tripStageForStatus(status.status) != TripStage.IN_TRANSIT) {
             val error = IllegalStateException(
                 "Backend accepted the pickup request but returned status '${status.status}'"
@@ -84,14 +94,20 @@ class TripRepository(
         }
         _backendStatus.value = status
         _tripStage.value = TripStage.IN_TRANSIT
-        result
+        Result.success(status)
     }
 
     suspend fun fileProof(
         tripId: String,
         proof: ProofOfDelivery,
-        otp: String
+        otp: String? = null
     ): Result<ProofOfDelivery> = withContext(ioDispatcher) {
+        val photoUrl = proof.photoUrl
+        if (photoUrl != null && !isBackendPhotoUrl(photoUrl)) {
+            return@withContext Result.failure(
+                IllegalArgumentException("Upload the delivery photo before submitting proof.")
+            )
+        }
         val proofResult = request { api.fileProof(tripId, otp, proof) }
         if (proofResult.isFailure) return@withContext proofResult
 
@@ -108,9 +124,119 @@ class TripRepository(
         Result.success(proofResult.getOrThrow())
     }
 
+    /** Uploads a selected photo and returns its durable backend URL. */
+    suspend fun uploadProofPhoto(
+        tripId: String,
+        contentResolver: ContentResolver,
+        uri: Uri,
+        cacheDir: File
+    ): Result<String> = withContext(ioDispatcher) {
+        var tempFile: File? = null
+        try {
+            val mimeType = contentResolver.getType(uri)
+                ?.substringBefore(';')
+                ?.lowercase()
+                ?: if (uri.scheme == "file") "image/jpeg" else null
+                ?: throw IllegalArgumentException("Could not determine the selected photo type.")
+            val extension = when (mimeType) {
+                "image/jpeg", "image/jpg" -> ".jpg"
+                "image/png" -> ".png"
+                "image/gif" -> ".gif"
+                "image/webp" -> ".webp"
+                else -> throw IllegalArgumentException(
+                    "Choose a JPEG, PNG, GIF, or WebP delivery photo."
+                )
+            }
+
+            val file = File.createTempFile("delivery-proof-", extension, cacheDir)
+            tempFile = file
+            val input = contentResolver.openInputStream(uri)
+                ?: throw IllegalStateException("Could not read the selected delivery photo.")
+            input.use { source ->
+                file.outputStream().use { destination ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var totalBytes = 0L
+                    while (true) {
+                        val bytesRead = source.read(buffer)
+                        if (bytesRead < 0) break
+                        totalBytes += bytesRead
+                        require(totalBytes <= MAX_PROOF_PHOTO_BYTES) {
+                            "Delivery photos must be 10 MB or smaller."
+                        }
+                        destination.write(buffer, 0, bytesRead)
+                    }
+                }
+            }
+
+            val imagePart = MultipartBody.Part.createFormData(
+                name = "image",
+                filename = file.name,
+                body = file.asRequestBody(mimeType.toMediaTypeOrNull())
+            )
+            val response = api.uploadProofPhoto(tripId, imagePart)
+            if (response.success == false) {
+                throw IllegalStateException(describe(response, "Could not upload the delivery photo."))
+            }
+            val url = response.data?.url?.trim()
+                ?.takeIf(::isBackendPhotoUrl)
+                ?: throw IllegalStateException(
+                    "The server did not return a valid delivery photo URL. Please retry."
+                )
+            Result.success(url)
+        } catch (e: HttpException) {
+            val message = readErrorBody(e) ?: "Photo upload failed (HTTP ${e.code()}). Please retry."
+            Result.failure(IllegalStateException(message, e))
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            tempFile?.delete()
+        }
+    }
+
     /** Verifies the buyer's delivery handover code for this trip. */
     suspend fun verifyOtp(tripId: String, otp: String): Result<TripStatus> = withContext(ioDispatcher) {
-        request { api.verifyOtp(tripId, otp) }
+        val result = request { api.verifyOtp(tripId, otp) }
+        val status = result.getOrNull()?.let { response ->
+            response.copy(tripId = response.tripId.ifBlank { tripId })
+        } ?: return@withContext result
+        _backendStatus.value = status
+        tripStageForStatus(status.status)?.let { _tripStage.value = it }
+        Result.success(status)
+    }
+
+    /** Restores the stage received with the persisted job before opening its route screen. */
+    fun restoreSavedStatus(status: String?, tripId: String?) {
+        val stage = status?.let(::tripStageForStatus) ?: return
+        _tripStage.value = stage
+        tripId?.takeIf { it.isNotBlank() }?.let { _activeTripId.value = it }
+    }
+
+    /** Resolves a missing trip ID from the backend's current-trip endpoint, scoped to this job. */
+    suspend fun resolveTripIdForJob(jobId: String): String? = withContext(ioDispatcher) {
+        val numericJobId = jobId.toLongOrNull()
+        if (numericJobId == null) {
+            _lastError.value = "This job has an invalid ID."
+            return@withContext null
+        }
+
+        val result = request { api.getCurrentTrip() }
+        val currentTrip: DeliveryJob = result.getOrNull() ?: return@withContext null
+        if (currentTrip.id != numericJobId) {
+            _lastError.value = "The backend's current trip does not match this job."
+            return@withContext null
+        }
+
+        val tripId = currentTrip.tripId?.takeIf { it.isNotBlank() }
+        if (tripId == null) {
+            _lastError.value = "The backend's current trip has no trip ID. Contact dispatch to link this job to a trip."
+            return@withContext null
+        }
+
+        _activeTripId.value = tripId
+        currentTrip.status?.let { status ->
+            tripStageForStatus(status)?.let { _tripStage.value = it }
+        }
+        tripId
     }
 
     /**
@@ -220,6 +346,14 @@ class TripRepository(
     }
 
     companion object {
+        private const val MAX_PROOF_PHOTO_BYTES = 10L * 1024L * 1024L
+
+        private fun isBackendPhotoUrl(value: String): Boolean {
+            val uri = runCatching { URI(value) }.getOrNull() ?: return false
+            return (uri.scheme.equals("https", ignoreCase = true) ||
+                uri.scheme.equals("http", ignoreCase = true)) && !uri.host.isNullOrBlank()
+        }
+
         private val _tripStage = MutableStateFlow<TripStage?>(null)
         private val _activeTripId = MutableStateFlow<String?>(null)
         private val _trackingActive = MutableStateFlow(false)
@@ -230,9 +364,10 @@ class TripRepository(
         fun tripStageForStatus(status: String): TripStage? = when (status.lowercase()) {
             "assigned", "accepted", "heading_to_pickup", "en_route_to_pickup" ->
                 TripStage.HEADING_TO_PICKUP
-            "picked_up", "in_transit", "in_progress", "en_route_to_buyer",
+            "picked_up", "pickup_confirmed", "shipment", "in_shipment", "shipped",
+            "in_transit", "in-transit", "transit", "in_progress", "en_route_to_buyer",
             "en_route_to_dropoff" -> TripStage.IN_TRANSIT
-            "delivered", "completed" -> TripStage.DELIVERED
+            "otp_verified", "delivered", "completed" -> TripStage.DELIVERED
             "cancelled", "canceled", "rejected" -> TripStage.CANCELLED
             else -> null
         }
@@ -241,7 +376,6 @@ class TripRepository(
             tripStageForStatus(status) in setOf(TripStage.HEADING_TO_PICKUP, TripStage.IN_TRANSIT)
 
         private fun isCompletedStatus(status: String): Boolean =
-            status.equals("delivered", ignoreCase = true) ||
-                status.equals("completed", ignoreCase = true)
+            tripStageForStatus(status) == TripStage.DELIVERED
     }
 }

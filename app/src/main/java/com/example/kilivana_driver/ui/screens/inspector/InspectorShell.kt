@@ -119,6 +119,7 @@ import com.example.kilivana_driver.data.network.SessionStore
 import com.example.kilivana_driver.ui.components.KilivanaButton
 import com.example.kilivana_driver.ui.components.KilivanaHeader
 import com.example.kilivana_driver.ui.components.KilivanaTextField
+import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
 import com.example.kilivana_driver.ui.theme.KilivanaAmber
 import com.example.kilivana_driver.ui.theme.KilivanaAmberTint
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
@@ -437,14 +438,20 @@ fun InspectorShell(
                 )
             }
         ) { padding ->
-            when (selectedTab) {
-                InspectorTab.DASHBOARD -> LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(KilivanaBackground)
-                        .padding(padding),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+            KilivanaPullRefreshBox(
+                isRefreshing = isLoading,
+                onRefresh = ::refreshAssignments,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                when (selectedTab) {
+                    InspectorTab.DASHBOARD -> LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(KilivanaBackground),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                     item {
                         InspectorDashboardHeader(
                             user = user,
@@ -759,6 +766,7 @@ fun InspectorShell(
                 }
             }
         }
+      }
     } else {
         selected?.let { item ->
             val checklistQuestions = checklistQuestionsFor(item.targetType) + customChecklistQuestions

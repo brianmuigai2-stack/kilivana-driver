@@ -94,7 +94,7 @@ data class LocationUploadResponse(
  */
 @Serializable
 data class TripStatus(
-    val tripId: String,
+    val tripId: String = "",
     val status: String, // e.g., "ACTIVE", "COMPLETED", "CANCELLED"
     val driverId: Long,
     val updatedAt: String,

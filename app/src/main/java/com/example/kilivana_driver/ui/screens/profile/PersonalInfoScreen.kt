@@ -22,6 +22,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,11 +35,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.AuthUser
 import com.example.kilivana_driver.ui.components.KilivanaHeader
+import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaGreen
 import com.example.kilivana_driver.ui.theme.KilivanaTextMuted
 import com.example.kilivana_driver.ui.theme.KilivanaTextPrimary
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
+import kotlinx.coroutines.launch
 
 /**
  * Read-only view of the account details the backend owns.
@@ -49,48 +56,65 @@ fun PersonalInfoScreen(
     user: AuthUser?,
     onBack: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(KilivanaBackground)
-            .verticalScroll(rememberScrollState())
-            .navigationBarsPadding()
+    var isRefreshing by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val onRefreshAction = {
+        isRefreshing = true
+        coroutineScope.launch {
+            kotlinx.coroutines.delay(600)
+            isRefreshing = false
+        }
+        Unit
+    }
+
+    KilivanaPullRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefreshAction,
+        modifier = Modifier.fillMaxSize()
     ) {
-        ProfileSubHeader(title = "Personal Information", onBack = onBack)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(KilivanaBackground)
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+        ) {
+            ProfileSubHeader(title = "Personal Information", onBack = onBack)
 
-        Column(modifier = Modifier.padding(16.dp)) {
-            InfoCard {
-                InfoRow("Full name", user?.name)
-                InfoDivider()
-                InfoRow("Email", user?.email)
-                InfoDivider()
-                InfoRow("Phone", user?.phone)
-                InfoDivider()
-                InfoRow("Region", user?.region)
-                InfoDivider()
-                InfoRow("Role", user?.role?.replaceFirstChar { it.uppercase() })
-                InfoDivider()
-                InfoRow("Account status", user?.status?.replaceFirstChar { it.uppercase() })
-                InfoDivider()
-                InfoRow(
-                    "Verification",
-                    user?.verificationStatus?.replaceFirstChar { it.uppercase() }
+            Column(modifier = Modifier.padding(16.dp)) {
+                InfoCard {
+                    InfoRow("Full name", user?.name)
+                    InfoDivider()
+                    InfoRow("Email", user?.email)
+                    InfoDivider()
+                    InfoRow("Phone", user?.phone)
+                    InfoDivider()
+                    InfoRow("Region", user?.region)
+                    InfoDivider()
+                    InfoRow("Role", user?.role?.replaceFirstChar { it.uppercase() })
+                    InfoDivider()
+                    InfoRow("Account status", user?.status?.replaceFirstChar { it.uppercase() })
+                    InfoDivider()
+                    InfoRow(
+                        "Verification",
+                        user?.verificationStatus?.replaceFirstChar { it.uppercase() }
+                    )
+                    InfoDivider()
+                    InfoRow("User ID", user?.id?.toString())
+                    InfoDivider()
+                    InfoRow("Member since", user?.createdAt?.take(10)?.ifBlank { null })
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "These details are managed by your Kilivana admin. Contact them if " +
+                        "your name, phone number or account status needs to change.",
+                    color = KilivanaTextMuted,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp
                 )
-                InfoDivider()
-                InfoRow("User ID", user?.id?.toString())
-                InfoDivider()
-                InfoRow("Member since", user?.createdAt?.take(10)?.ifBlank { null })
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "These details are managed by your Kilivana admin. Contact them if " +
-                    "your name, phone number or account status needs to change.",
-                color = KilivanaTextMuted,
-                fontSize = 13.sp,
-                lineHeight = 19.sp
-            )
         }
     }
 }
