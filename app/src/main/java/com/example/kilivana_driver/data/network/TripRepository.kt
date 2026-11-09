@@ -1,214 +1,417 @@
 package com.example.kilivana_driver.data.network
 
-import com.example.kilivana_driver.data.model.ApiError
+import android.content.ContentResolver
+import android.net.Uri
 import com.example.kilivana_driver.data.model.ApiResponse
-import com.example.kilivana_driver.data.model.Job
-import com.example.kilivana_driver.data.model.JobStatus
-import com.example.kilivana_driver.data.model.LocationUpdate
-import com.example.kilivana_driver.data.model.TrackingConfig
+import com.example.kilivana_driver.data.model.DeliveryJob
+import com.example.kilivana_driver.data.model.ProofOfDelivery
 import com.example.kilivana_driver.data.model.TripStage
 import com.example.kilivana_driver.data.model.TripStatus
-import com.example.kilivana_driver.data.network.SessionStore
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import retrofit2.HttpException
+import java.io.File
+import java.net.URI
 
 /**
- * Repository for managing the active trip/delivery lifecycle.
- *
- * Coordinates:
- * - Starting/stopping tracking on the backend
- * - Syncing trip status (polling or initial fetch)
- * - Converting between backend TripStatus and local TripStage
- *
- * This repository does NOT handle GPS location streaming — that's
- * LocationRepository's job. TripRepository owns the *trip* state machine.
+ * Coordinates the backend-owned trip lifecycle. The trip ID comes from the
+ * trip-accept response and is never substituted with the delivery-job ID.
  */
 class TripRepository(
     private val api: TripApi = ApiClient.create(),
     private val locationRepository: LocationRepository,
-    private val config: TrackingConfig = TrackingConfig.DEFAULT,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
 
     private val errorJson = Json { ignoreUnknownKeys = true }
 
-    /** Current trip stage derived from backend status + local actions. */
-    private val _tripStage = MutableStateFlow<TripStage?>(null)
     val tripStage: StateFlow<TripStage?> = _tripStage.asStateFlow()
-
-    /** The currently active trip ID, or null if no trip is being tracked. */
-    private val _activeTripId = MutableStateFlow<String?>(null)
     val activeTripId: StateFlow<String?> = _activeTripId.asStateFlow()
-
-    /** Latest trip status from the backend (for sync/reconnect). */
-    private val _backendStatus = MutableStateFlow<TripStatus?>(null)
+    val trackingActive: StateFlow<Boolean> = _trackingActive.asStateFlow()
     val backendStatus: StateFlow<TripStatus?> = _backendStatus.asStateFlow()
-
-    /** True while a start/stop/sync operation is in progress. */
-    private val _isBusy = MutableStateFlow(false)
     val isBusy: StateFlow<Boolean> = _isBusy.asStateFlow()
-
-    /** Last error from a trip operation (cleared on next operation). */
-    private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
-    /**
-     * Starts tracking for a trip that the driver has accepted.
-     *
-     * Called when the driver taps "Start Trip" (heading to pickup) or
-     * "Mark as Picked Up" (entering in-transit). The backend is notified
-     * so it can start accepting location updates for this trip.
-     *
-     * @param job The accepted job (must have status ACCEPTED).
-     * @return true if tracking started successfully.
-     */
-    suspend fun startTracking(job: Job): Boolean = withContext(ioDispatcher) {
+    suspend fun acceptJob(jobId: Long): Result<TripStatus> = withContext(ioDispatcher) {
+        val result = request { api.acceptJob(jobId) }
+        val trip = result.getOrNull() ?: return@withContext result
+        if (trip.tripId.isBlank()) {
+            val error = IllegalStateException("Backend accepted the job but returned no trip ID")
+            _lastError.value = error.message
+            return@withContext Result.failure(error)
+        }
+        _activeTripId.value = trip.tripId
+        _trackingActive.value = false
+        _backendStatus.value = trip
+        _tripStage.value = tripStageForStatus(trip.status)
+        locationRepository.clearQueue()
+        result
+    }
+
+    /** Starts reporting only after the backend confirms tracking for this trip ID. */
+    suspend fun startTracking(tripId: String): Boolean = withContext(ioDispatcher) {
+        val expectedGeneration = stateGeneration.get()
+        if (!requestTrackingStart(tripId)) return@withContext false
+        synchronized(stateLock) {
+            if (stateGeneration.get() != expectedGeneration) return@withContext false
+            _activeTripId.value = tripId
+            _trackingActive.value = true
+            if (_tripStage.value == null) _tripStage.value = TripStage.HEADING_TO_PICKUP
+            locationRepository.clearQueue()
+            true
+        }
+    }
+
+    /** Confirms server tracking without publishing local trip state prematurely. */
+    private suspend fun requestTrackingStart(tripId: String): Boolean {
         _isBusy.value = true
         _lastError.value = null
-        val userId = SessionStore.userId ?: run {
-            _lastError.value = "Not signed in"
-            _isBusy.value = false
-            return@withContext false
-        }
-
-        try {
-            val response = api.startTracking(job.id)
-            if (response.success != false) {
-                _activeTripId.value = job.id
-                _tripStage.value = TripStage.HEADING_TO_PICKUP
-                // Clear any stale offline queue from a previous trip.
-                locationRepository.clearQueue()
-                _isBusy.value = false
-                return@withContext true
+        return try {
+            val response = api.startTracking(tripId)
+            if (response.success == false) {
+                _lastError.value = describe(response, "Unable to start trip tracking")
+                false
             } else {
-                _lastError.value = describe(response.error, response.message)
-                _isBusy.value = false
-                return@withContext false
+                true
             }
-        } catch (e: HttpException) {
-            _lastError.value = readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"
-            _isBusy.value = false
-            return@withContext false
         } catch (e: Exception) {
-            _lastError.value = e.message ?: "Couldn't reach the backend"
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            _lastError.value = describeException(e)
+            false
+        } finally {
             _isBusy.value = false
-            return@withContext false
         }
     }
 
-    /**
-     * Advances the trip to the IN_TRANSIT stage (cargo picked up).
-     *
-     * This is a local state transition; the backend is informed via
-     * the regular location updates (which now carry the new stage context).
-     * If the backend needs an explicit "picked up" call, add an endpoint
-     * here and in TripApi.
-     */
-    fun advanceToInTransit() {
-        if (_tripStage.value == null || _tripStage.value == TripStage.HEADING_TO_PICKUP) {
-            _tripStage.value = TripStage.IN_TRANSIT
+    /** Records pickup on the backend before the UI changes to the buyer leg. */
+    suspend fun confirmPickup(tripId: String): Result<TripStatus> = withContext(ioDispatcher) {
+        val result = request { api.updateStatus(tripId, "picked_up") }
+        val status = result.getOrNull()?.let { response ->
+            response.copy(tripId = response.tripId.ifBlank { tripId })
+        } ?: return@withContext result
+        if (tripStageForStatus(status.status) != TripStage.IN_TRANSIT) {
+            val error = IllegalStateException(
+                "Backend accepted the pickup request but returned status '${status.status}'"
+            )
+            _lastError.value = error.message
+            return@withContext Result.failure(error)
+        }
+        _backendStatus.value = status
+        _tripStage.value = TripStage.IN_TRANSIT
+        Result.success(status)
+    }
+
+    suspend fun fileProof(
+        tripId: String,
+        proof: ProofOfDelivery,
+        otp: String? = null
+    ): Result<ProofOfDelivery> = withContext(ioDispatcher) {
+        val photoUrl = proof.photoUrl
+        if (photoUrl != null && !isBackendPhotoUrl(photoUrl)) {
+            return@withContext Result.failure(
+                IllegalArgumentException("Upload the delivery photo before submitting proof.")
+            )
+        }
+        val proofResult = request { api.fileProof(tripId, otp, proof) }
+        if (proofResult.isFailure) return@withContext proofResult
+
+        val tripResult = request { api.getTrip(tripId) }
+        val trip = tripResult.getOrNull() ?: return@withContext Result.failure(
+            tripResult.exceptionOrNull() ?: IllegalStateException("Unable to verify delivery completion")
+        )
+        if (!isCompletedStatus(trip.status)) {
+            return@withContext Result.failure(
+                IllegalStateException("Proof was received, but the backend has not confirmed delivery completion")
+            )
+        }
+        _backendStatus.value = trip
+        Result.success(proofResult.getOrThrow())
+    }
+
+    /** Uploads a selected photo and returns its durable backend URL. */
+    suspend fun uploadProofPhoto(
+        tripId: String,
+        contentResolver: ContentResolver,
+        uri: Uri,
+        cacheDir: File
+    ): Result<String> = withContext(ioDispatcher) {
+        var tempFile: File? = null
+        try {
+            val mimeType = contentResolver.getType(uri)
+                ?.substringBefore(';')
+                ?.lowercase()
+                ?: if (uri.scheme == "file") "image/jpeg" else null
+                ?: throw IllegalArgumentException("Could not determine the selected photo type.")
+            val extension = when (mimeType) {
+                "image/jpeg", "image/jpg" -> ".jpg"
+                "image/png" -> ".png"
+                "image/gif" -> ".gif"
+                "image/webp" -> ".webp"
+                else -> throw IllegalArgumentException(
+                    "Choose a JPEG, PNG, GIF, or WebP delivery photo."
+                )
+            }
+
+            val file = File.createTempFile("delivery-proof-", extension, cacheDir)
+            tempFile = file
+            val input = contentResolver.openInputStream(uri)
+                ?: throw IllegalStateException("Could not read the selected delivery photo.")
+            input.use { source ->
+                file.outputStream().use { destination ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var totalBytes = 0L
+                    while (true) {
+                        val bytesRead = source.read(buffer)
+                        if (bytesRead < 0) break
+                        totalBytes += bytesRead
+                        require(totalBytes <= MAX_PROOF_PHOTO_BYTES) {
+                            "Delivery photos must be 10 MB or smaller."
+                        }
+                        destination.write(buffer, 0, bytesRead)
+                    }
+                }
+            }
+
+            val imagePart = MultipartBody.Part.createFormData(
+                name = "image",
+                filename = file.name,
+                body = file.asRequestBody(mimeType.toMediaTypeOrNull())
+            )
+            val response = api.uploadProofPhoto(tripId, imagePart)
+            if (response.success == false) {
+                throw IllegalStateException(describe(response, "Could not upload the delivery photo."))
+            }
+            val url = response.data?.url?.trim()
+                ?.takeIf(::isBackendPhotoUrl)
+                ?: throw IllegalStateException(
+                    "The server did not return a valid delivery photo URL. Please retry."
+                )
+            Result.success(url)
+        } catch (e: HttpException) {
+            val message = readErrorBody(e) ?: "Photo upload failed (HTTP ${e.code()}). Please retry."
+            Result.failure(IllegalStateException(message, e))
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            tempFile?.delete()
         }
     }
 
+    /** Verifies the buyer's delivery handover code for this trip. */
+    suspend fun verifyOtp(tripId: String, otp: String): Result<TripStatus> = withContext(ioDispatcher) {
+        val result = request { api.verifyOtp(tripId, otp) }
+        val status = result.getOrNull()?.let { response ->
+            response.copy(tripId = response.tripId.ifBlank { tripId })
+        } ?: return@withContext result
+        _backendStatus.value = status
+        tripStageForStatus(status.status)?.let { _tripStage.value = it }
+        Result.success(status)
+    }
+
+    /** Restores the stage received with the persisted job before opening its route screen. */
+    fun restoreSavedStatus(status: String?, tripId: String?) {
+        val stage = status?.let(::tripStageForStatus) ?: return
+        _tripStage.value = stage
+        tripId?.takeIf { it.isNotBlank() }?.let { _activeTripId.value = it }
+    }
+
+    /** Resolves a missing trip ID from the backend's current-trip endpoint, scoped to this job. */
+    suspend fun resolveTripIdForJob(jobId: String): String? = withContext(ioDispatcher) {
+        val numericJobId = jobId.toLongOrNull()
+        if (numericJobId == null) {
+            _lastError.value = "This job has an invalid ID."
+            return@withContext null
+        }
+
+        val result = request { api.getCurrentTrip() }
+        val currentTrip: DeliveryJob = result.getOrNull() ?: return@withContext null
+        if (currentTrip.id != numericJobId) {
+            _lastError.value = "The backend's current trip does not match this job."
+            return@withContext null
+        }
+
+        val tripId = currentTrip.tripId?.takeIf { it.isNotBlank() }
+        if (tripId == null) {
+            _lastError.value = "The backend's current trip has no trip ID. Contact dispatch to link this job to a trip."
+            return@withContext null
+        }
+
+        _activeTripId.value = tripId
+        currentTrip.status?.let { status ->
+            tripStageForStatus(status)?.let { _tripStage.value = it }
+        }
+        tripId
+    }
+
     /**
-     * Stops tracking for the current trip.
-     *
-     * Called when delivery is confirmed (OTP verified), cancelled,
-     * or the driver explicitly ends the trip.
-     *
-     * @param reason One of "COMPLETED", "CANCELLED", "DRIVER_ENDED".
-     * @return true if the backend acknowledged the stop.
+     * Clears local tracking only after the caller has received server
+     * confirmation for completion or cancellation. There is no separate stop
+     * endpoint in the supplied backend contract.
      */
-    suspend fun stopTracking(reason: String): Boolean = withContext(ioDispatcher) {
+    fun stopTracking(reason: String) {
+        synchronized(stateLock) {
+            stateGeneration.incrementAndGet()
+            _tripStage.value = when (reason.uppercase()) {
+                "COMPLETED" -> TripStage.DELIVERED
+                else -> TripStage.CANCELLED
+            }
+            _activeTripId.value = null
+            _trackingActive.value = false
+            _backendStatus.value = null
+            locationRepository.clearQueue()
+        }
+    }
+
+    suspend fun syncStatus(): TripStatus? = checkForActiveTrip()
+
+    /** Restores the latest active trip identity/status after reconnect. */
+    suspend fun checkForActiveTrip(): TripStatus? = withContext(ioDispatcher) {
+        val recoveryGeneration = stateGeneration.get()
+        _lastError.value = null
+        try {
+            val response = api.getMyTrips()
+            if (stateGeneration.get() != recoveryGeneration) return@withContext null
+            if (response.success == false) {
+                _lastError.value = describe(response, "Unable to restore active trip")
+                return@withContext null
+            }
+            val active = response.data.orEmpty()
+                .lastOrNull { isActiveTripStatus(it.status) }
+            if (active == null) {
+                synchronized(stateLock) {
+                    if (stateGeneration.get() != recoveryGeneration) return@withContext null
+                    _backendStatus.value = null
+                    _activeTripId.value = null
+                    _trackingActive.value = false
+                    _tripStage.value = null
+                }
+                return@withContext null
+            }
+            if (active.tripId.isBlank()) {
+                _lastError.value = "Backend returned an active trip without a trip ID"
+                return@withContext null
+            }
+            if (!requestTrackingStart(active.tripId)) return@withContext null
+            val recovered = synchronized(stateLock) {
+                if (stateGeneration.get() != recoveryGeneration) return@withContext null
+                _backendStatus.value = active
+                _activeTripId.value = active.tripId
+                _tripStage.value = tripStageForStatus(active.status)
+                _trackingActive.value = true
+                locationRepository.clearQueue()
+                true
+            }
+            if (!recovered) return@withContext null
+            active
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            _lastError.value = describeException(e)
+            null
+        }
+    }
+
+    /** Clears shared trip state and invalidates any recovery request still in flight. */
+    fun clear() {
+        synchronized(stateLock) {
+            stateGeneration.incrementAndGet()
+            _activeTripId.value = null
+            _trackingActive.value = false
+            _tripStage.value = null
+            _backendStatus.value = null
+            _lastError.value = null
+            locationRepository.clearQueue()
+        }
+    }
+
+    private suspend fun <T> request(block: suspend () -> ApiResponse<T>): Result<T> {
         _isBusy.value = true
         _lastError.value = null
-        // The supplied API contract exposes trip tracking start and active-trip
-        // lookup, but no stop endpoint. Job status is updated through the
-        // logistics API before this local tracking state is cleared.
-        _tripStage.value = if (reason == "COMPLETED") TripStage.DELIVERED else TripStage.CANCELLED
-        _activeTripId.value = null
-        _backendStatus.value = null
-        locationRepository.clearQueue()
-        _isBusy.value = false
-        true
-    }
-
-    /**
-     * Syncs the current trip status from the backend.
-     *
-     * Use this on app resume, after reconnecting, or when a WebSocket
-     * push indicates a status change.
-     */
-    suspend fun syncStatus(): TripStatus? = withContext(ioDispatcher) {
-        checkForActiveTrip()
-    }
-
-    /**
-     * Checks if there's an active trip for the current driver on the backend.
-     *
-     * Called on app startup to recover a tracking session that was
-     * interrupted (process death, crash, etc.).
-     */
-    suspend fun checkForActiveTrip(): TripStatus? = withContext(ioDispatcher) {
-        val userId = SessionStore.userId ?: return@withContext null
-        try {
-            val response = api.getActiveTrips()
-            if (response.success != false && response.data != null && response.data!!.isNotEmpty()) {
-                // Backend should return at most one active trip per driver.
-                val status = response.data!!.first()
-                _activeTripId.value = status.tripId
-                _backendStatus.value = status
-                updateStageFromBackend(status)
-                return@withContext status
+        return try {
+            val response = block()
+            val data = response.data
+            if (response.success != false && data != null) {
+                Result.success(data)
+            } else {
+                val message = describe(response, "The backend returned no trip data")
+                _lastError.value = message
+                Result.failure(IllegalStateException(message))
             }
-            return@withContext null
-        } catch (e: HttpException) {
-            _lastError.value = readErrorBody(e) ?: "Server responded with HTTP ${e.code()}"
-            return@withContext null
         } catch (e: Exception) {
-            _lastError.value = e.message ?: "Couldn't reach the backend"
-            return@withContext null
+            val message = describeException(e)
+            _lastError.value = message
+            Result.failure(IllegalStateException(message, e))
+        } finally {
+            _isBusy.value = false
         }
     }
 
-    /** Clears all trip state (logout, session expiry, etc.). */
-    fun clear() {
-        _activeTripId.value = null
-        _tripStage.value = null
-        _backendStatus.value = null
-        _lastError.value = null
-        locationRepository.clearQueue()
-    }
-
-    /** Maps backend status string to local TripStage. */
-    private fun updateStageFromBackend(status: TripStatus) {
-        _tripStage.value = when (status.status.uppercase()) {
-            "HEADING_TO_PICKUP", "EN_ROUTE_TO_PICKUP", "ASSIGNED", "ACCEPTED" -> TripStage.HEADING_TO_PICKUP
-            "IN_TRANSIT", "PICKED_UP", "EN_ROUTE_TO_BUYER", "EN_ROUTE_TO_DROPOFF" -> TripStage.IN_TRANSIT
-            "DELIVERED", "COMPLETED" -> TripStage.DELIVERED
-            "CANCELLED", "REJECTED" -> TripStage.CANCELLED
-            else -> TripStage.HEADING_TO_PICKUP // Default to safe state
+    private fun describe(response: ApiResponse<*>, fallback: String): String {
+        val code = response.error?.code?.takeIf { it.isNotBlank() }
+        val details = response.error?.details?.takeIf { it.isNotBlank() }
+        return listOfNotNull(code, details).joinToString(": ").ifBlank {
+            response.message.takeIf { it.isNotBlank() } ?: fallback
         }
     }
 
-    private fun readErrorBody(e: HttpException): String? {
-        val raw = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
-            ?.takeIf { it.isNotBlank() } ?: return null
-        val envelope = runCatching { errorJson.decodeFromString<ApiResponse<Unit>>(raw) }.getOrNull()
-            ?: return null
-        return describe(envelope.error, envelope.message).takeIf { it.isNotBlank() }
+    private fun describeException(error: Exception): String =
+        if (error is HttpException) {
+            readErrorBody(error) ?: "Server responded with HTTP ${error.code()}"
+        } else {
+            error.message ?: "Couldn't reach the backend"
+        }
+
+    private fun readErrorBody(error: HttpException): String? {
+        val raw = runCatching { error.response()?.errorBody()?.string() }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+        val response = runCatching {
+            errorJson.decodeFromString<ApiResponse<Unit>>(raw)
+        }.getOrNull() ?: return null
+        return describe(response, "").takeIf { it.isNotBlank() }
     }
 
-    private fun describe(error: ApiError?, fallback: String): String {
-        val code = error?.code?.takeIf { it.isNotBlank() }
-        val details = error?.details?.takeIf { it.isNotBlank() }
-        return listOfNotNull(code, details).joinToString(": ").ifBlank { fallback }
+    companion object {
+        private const val MAX_PROOF_PHOTO_BYTES = 10L * 1024L * 1024L
+
+        private fun isBackendPhotoUrl(value: String): Boolean {
+            val uri = runCatching { URI(value) }.getOrNull() ?: return false
+            return (uri.scheme.equals("https", ignoreCase = true) ||
+                uri.scheme.equals("http", ignoreCase = true)) && !uri.host.isNullOrBlank()
+        }
+
+        private val _tripStage = MutableStateFlow<TripStage?>(null)
+        private val _activeTripId = MutableStateFlow<String?>(null)
+        private val _trackingActive = MutableStateFlow(false)
+        private val _backendStatus = MutableStateFlow<TripStatus?>(null)
+        private val _isBusy = MutableStateFlow(false)
+        private val _lastError = MutableStateFlow<String?>(null)
+        private val stateGeneration = AtomicLong(0)
+        private val stateLock = Any()
+
+        /** Maps normalized backend lifecycle states to the driver's route stage. */
+        fun tripStageForStatus(status: String): TripStage? = when (status.trim().lowercase()) {
+            "assigned", "accepted", "heading_to_pickup", "en_route_to_pickup" ->
+                TripStage.HEADING_TO_PICKUP
+            "arrived_at_destination", "picked_up", "pickup_confirmed", "shipment", "in_shipment", "shipped",
+            "in_transit", "in-transit", "transit", "in_progress", "en_route_to_buyer",
+            "en_route_to_dropoff" -> TripStage.IN_TRANSIT
+            "otp_verified", "delivered", "completed" -> TripStage.DELIVERED
+            "cancelled", "canceled", "rejected" -> TripStage.CANCELLED
+            else -> null
+        }
+
+        private fun isActiveTripStatus(status: String): Boolean =
+            tripStageForStatus(status) in setOf(TripStage.HEADING_TO_PICKUP, TripStage.IN_TRANSIT)
+
+        private fun isCompletedStatus(status: String): Boolean =
+            tripStageForStatus(status) == TripStage.DELIVERED
     }
 }

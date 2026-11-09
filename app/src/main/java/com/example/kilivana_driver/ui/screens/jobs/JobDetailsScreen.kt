@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.model.JobStatus
+import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
 import com.example.kilivana_driver.ui.components.KilivanaButton
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
@@ -61,6 +62,7 @@ import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
 import com.example.kilivana_driver.ui.theme.KilivanaTheme
 import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
+/** Displays job details and exposes its primary lifecycle and refresh actions. */
 @Composable
 fun JobDetailsScreen(
     job: Job,
@@ -68,17 +70,24 @@ fun JobDetailsScreen(
     onAccept: () -> Unit,
     onDecline: () -> Unit,
     onStartTrip: () -> Unit,
+    onRefresh: () -> Unit = {},
+    isRefreshing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var showDeclineDialog by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(KilivanaBackground)
-            .navigationBarsPadding()
+    KilivanaPullRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefresh,
+        modifier = modifier.fillMaxSize()
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(KilivanaBackground)
+                .navigationBarsPadding()
+        ) {
         KilivanaStatusBarScrim()
 
         // Top bar
@@ -274,10 +283,17 @@ fun JobDetailsScreen(
                     }
                     JobStatus.COMPLETED -> Unit
                     JobStatus.CANCELLED -> Unit
+                    JobStatus.UNKNOWN -> {
+                        KilivanaButton(
+                            text = "Refresh status",
+                            onClick = onRefresh
+                        )
+                    }
                 }
             }
         }
     }
+}
 
     if (showDeclineDialog) {
         AlertDialog(

@@ -32,7 +32,8 @@ data class DashboardUiState(
     val hasUnreadNotifications: Boolean = false,
     val recentActivity: List<ActivityItem> = emptyList(),
     /** Primary profile image URL, or blank to fall back to initials. */
-    val photoUrl: String = ""
+    val photoUrl: String = "",
+    val isLoading: Boolean = false
 )
 
 class DashboardViewModel(
@@ -41,6 +42,8 @@ class DashboardViewModel(
 
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+    private val refreshLock = Any()
+    private var refreshSequence = 0L
 
     init {
         _uiState.update { it.copy(greeting = currentGreeting()) }
@@ -57,6 +60,11 @@ class DashboardViewModel(
                 // launch, but their role must not trigger driver-only calls.
                 if (user != null && user.role.equals(DRIVER_ROLE, ignoreCase = true)) {
                     refreshJobs(user.id)
+                } else {
+                    synchronized(refreshLock) {
+                        refreshSequence++
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                    }
                 }
             }
         }
@@ -65,6 +73,11 @@ class DashboardViewModel(
     /** Fetches the driver's jobs from the backend and derives the dashboard metrics. */
     fun refreshJobs(driverId: Long? = SessionStore.userId) {
         val id = driverId ?: return
+        val requestId = synchronized(refreshLock) {
+            refreshSequence++
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            refreshSequence
+        }
         viewModelScope.launch {
             val result = jobsRepository.getJobsByDriver(id)
             if (result.isSuccess) {
@@ -73,12 +86,21 @@ class DashboardViewModel(
                 val completedJobs = deliveryJobs.filter { it.isCompleted() }
                 val totalEstimatedMinutes = acceptedJobs.sumOf { it.estimatedMinutes }
 
-                _uiState.update {
-                    it.copy(
-                        deliveriesAssigned = acceptedJobs.size,
-                        estimatedTransit = formatTransitMinutes(totalEstimatedMinutes),
-                        recentActivity = buildRecentActivity(completedJobs)
-                    )
+                synchronized(refreshLock) {
+                    if (refreshSequence == requestId) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            deliveriesAssigned = acceptedJobs.size,
+                            estimatedTransit = formatTransitMinutes(totalEstimatedMinutes),
+                            recentActivity = buildRecentActivity(completedJobs)
+                        )
+                    }
+                }
+            } else {
+                synchronized(refreshLock) {
+                    if (refreshSequence == requestId) {
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                    }
                 }
             }
         }

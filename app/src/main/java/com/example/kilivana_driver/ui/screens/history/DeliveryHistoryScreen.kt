@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import com.example.kilivana_driver.data.model.DeliveryOutcome
 import com.example.kilivana_driver.data.model.DeliveryRecord
 import com.example.kilivana_driver.ui.components.KilivanaStatusBarScrim
+import com.example.kilivana_driver.ui.components.KilivanaPullRefreshBox
 import com.example.kilivana_driver.ui.theme.KilivanaBackground
 import com.example.kilivana_driver.ui.theme.KilivanaBorder
 import com.example.kilivana_driver.ui.theme.KilivanaError
@@ -66,10 +68,13 @@ private enum class HistoryFilter(val label: String) {
     CANCELLED("Cancelled")
 }
 
+/** Shows filtered completed and cancelled delivery history with a live refresh action. */
 @Composable
 fun DeliveryHistoryScreen(
     records: List<DeliveryRecord>,
     onBack: () -> Unit,
+    isRefreshing: Boolean = false,
+    onRefreshJobs: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var filter by rememberSaveable { mutableStateOf(HistoryFilter.ALL) }
@@ -80,11 +85,16 @@ fun DeliveryHistoryScreen(
         HistoryFilter.CANCELLED -> records.filter { it.outcome == DeliveryOutcome.CANCELLED }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(KilivanaBackground)
+    KilivanaPullRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefreshJobs,
+        modifier = modifier.fillMaxSize()
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(KilivanaBackground)
+        ) {
         KilivanaStatusBarScrim()
 
         // Top bar
@@ -146,6 +156,7 @@ fun DeliveryHistoryScreen(
             }
         }
     }
+}
 }
 
 @Composable

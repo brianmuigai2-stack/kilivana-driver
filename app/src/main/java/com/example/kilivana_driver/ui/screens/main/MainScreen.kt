@@ -15,11 +15,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.kilivana_driver.data.model.Driver
 import com.example.kilivana_driver.data.model.DeliveryOutcome
 import com.example.kilivana_driver.data.model.DeliveryRecord
 import com.example.kilivana_driver.data.model.JobStatus
-import com.example.kilivana_driver.tracking.LocationTrackingService
 import com.example.kilivana_driver.ui.components.BottomTab
 import com.example.kilivana_driver.ui.components.KilivanaBottomBar
 import com.example.kilivana_driver.ui.screens.dashboard.DashboardScreen
@@ -33,6 +33,9 @@ import com.example.kilivana_driver.ui.screens.map.MapScreen
 import com.example.kilivana_driver.ui.screens.notifications.NotificationsScreen
 import com.example.kilivana_driver.ui.screens.notifications.NotificationsUiState
 import com.example.kilivana_driver.data.model.AuthUser
+import com.example.kilivana_driver.data.network.LocationRepository
+import com.example.kilivana_driver.data.network.TripRepository
+import com.example.kilivana_driver.tracking.LocationTrackingService
 import com.example.kilivana_driver.ui.screens.profile.PersonalInfoScreen
 import com.example.kilivana_driver.ui.screens.profile.ProfileImagesScreen
 import com.example.kilivana_driver.ui.screens.profile.ProfileScreen
@@ -68,6 +71,7 @@ fun MainScreen(
     onAcceptJob: (String) -> Unit,
     onDeclineJob: (String) -> Unit,
     onRefreshJobs: () -> Unit,
+    onRefreshDashboard: () -> Unit = {},
     onPushNotificationsChange: (Boolean) -> Unit,
     onNotificationSoundChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
@@ -83,9 +87,14 @@ fun MainScreen(
     onPickImage: () -> Unit = {},
     onDeleteImage: (Long) -> Unit = {},
     onDismissUploadMessage: () -> Unit = {},
+    onRefreshProfile: () -> Unit = {},
     onSetSystemBars: (darkHeader: Boolean, greenBand: Boolean) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
+    val tripRepository = remember { TripRepository(locationRepository = LocationRepository()) }
+    val activeTripId by tripRepository.activeTripId.collectAsStateWithLifecycle()
+    val trackingActive by tripRepository.trackingActive.collectAsStateWithLifecycle()
+    var trackingServiceStarted by remember { mutableStateOf(false) }
     var selectedTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
     var selectedJobId by rememberSaveable { mutableStateOf<String?>(null) }
     var activeTripJobId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -147,12 +156,25 @@ fun MainScreen(
     val greenBandVisible = showSettings || showPersonalInfo ||
         showVehicleDetails || showProfileImages
 
-    // Start/stop the foreground tracking service when a trip starts/ends.
-    LaunchedEffect(activeTripJobId) {
-        activeTripJobId?.let { tripId ->
+    LaunchedEffect(activeTripId, trackingActive) {
+        val tripId = activeTripId?.takeIf { it.isNotBlank() }
+        if (trackingActive && tripId != null) {
             LocationTrackingService.startTracking(context, tripId)
-        } ?: run {
+            trackingServiceStarted = true
+        } else if (trackingServiceStarted) {
             LocationTrackingService.stopTracking(context)
+            trackingServiceStarted = false
+        }
+    }
+
+    LaunchedEffect(activeTripId, trackingActive, jobsState.jobs) {
+        val currentTripId = activeTripId
+        if (trackingActive && !currentTripId.isNullOrBlank() && activeTripJobId == null) {
+            val matchingJob = jobsState.jobs.firstOrNull { it.tripId == currentTripId }
+                ?: jobsState.jobs.firstOrNull { it.status == JobStatus.ACCEPTED }
+            if (matchingJob != null) {
+                activeTripJobId = matchingJob.id
+            }
         }
     }
 
@@ -178,6 +200,7 @@ fun MainScreen(
             isLoading = profileUiState.isLoading,
             needsProfile = profileUiState.needsProfile,
             onBack = { showVehicleDetails = false },
+            onRefreshProfile = onRefreshProfile,
             onManageImagesClick = { showProfileImages = true }
         )
 
@@ -230,7 +253,9 @@ fun MainScreen(
             onStartTrip = {
                 activeTripJobId = selectedJob.id
                 selectedJobId = null
-            }
+            },
+            onRefresh = onRefreshJobs,
+            isRefreshing = jobsState.isLoading
         )
 
         else -> Scaffold(
@@ -254,7 +279,9 @@ fun MainScreen(
                 if (showHistory) {
                     DeliveryHistoryScreen(
                         records = historyRecords,
-                        onBack = closeHistory
+                        onBack = closeHistory,
+                        isRefreshing = jobsState.isLoading,
+                        onRefreshJobs = onRefreshJobs
                     )
                 } else {
                     when (selectedTab) {
@@ -270,7 +297,9 @@ fun MainScreen(
                                 selectedTab = BottomTab.JOBS
                                 showHistory = true
                             },
-                            onProfileClick = { selectedTab = BottomTab.MORE }
+                            onProfileClick = { selectedTab = BottomTab.MORE },
+                            onRefresh = onRefreshDashboard,
+                            isRefreshing = dashboardState.isLoading
                         )
                          BottomTab.JOBS -> JobsScreen(
                             uiState = jobsState,
@@ -298,7 +327,8 @@ fun MainScreen(
                             onChangePasswordClick = onOpenResetPassword,
                             onNotificationsClick = { showNotifications = true },
                             onHelpClick = { /* TODO */ },
-                            onLogout = onLogout
+                            onLogout = onLogout,
+                            onRefresh = onRefreshProfile
                         )
                     }
                 }

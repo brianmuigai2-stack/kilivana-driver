@@ -5,7 +5,11 @@ import coil.Coil
 import coil.ImageLoader
 import com.example.kilivana_driver.data.network.ApiClient
 import com.example.kilivana_driver.data.network.SessionPreferences
+import com.example.kilivana_driver.data.network.SessionStore
+import com.example.kilivana_driver.data.network.LocationRepository
+import com.example.kilivana_driver.data.network.TripRepository
 import com.example.kilivana_driver.notifications.NotificationHelper
+import com.example.kilivana_driver.tracking.LocationTrackingService
 
 /**
  * Application entry point. Wires up the pieces that need a context
@@ -21,6 +25,10 @@ class KilivanaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ApiClient.install(SessionPreferences(this))
+        SessionStore.setSessionEndHandler {
+            LocationTrackingService.stopTracking(this)
+            TripRepository(locationRepository = LocationRepository()).clear()
+        }
         NotificationHelper.ensureChannels(this)
         // Share the same OkHttpClient so Coil sends the ngrok-skip-browser-warning
         // header and the auth token when loading profile images.

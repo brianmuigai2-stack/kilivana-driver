@@ -11,3 +11,8 @@ data class ProofOfDelivery(
     val photoUrl: String? = null,
     val deliveredAt: String? = null
 )
+
+@Serializable
+data class ProofPhotoUpload(
+    val url: String = ""
+)

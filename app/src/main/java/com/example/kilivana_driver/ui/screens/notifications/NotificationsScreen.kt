@@ -34,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -67,6 +68,7 @@ import com.example.kilivana_driver.ui.theme.KilivanaWhite
 
 private enum class NotificationFilter { ALL, UNREAD }
 
+/** Displays the existing sample notification inbox without a no-op refresh gesture. */
 @Composable
 fun NotificationsScreen(
     uiState: NotificationsUiState,
@@ -84,12 +86,13 @@ fun NotificationsScreen(
     val today = visible.filter { !it.isEarlier }
     val earlier = visible.filter { it.isEarlier }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(KilivanaBackground)
-            .navigationBarsPadding()
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(KilivanaBackground)
+                .navigationBarsPadding()
+        ) {
         KilivanaStatusBarScrim()
 
         // Top bar
@@ -188,6 +191,7 @@ fun NotificationsScreen(
             }
         }
     }
+}
 }
 
 @Composable

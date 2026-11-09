@@ -219,6 +219,7 @@ class MainActivity : ComponentActivity() {
                              onAcceptJob = jobsViewModel::acceptJob,
                              onDeclineJob = jobsViewModel::declineJob,
                              onRefreshJobs = jobsViewModel::refresh,
+                            onRefreshDashboard = { dashboardViewModel.refreshJobs() },
                             onPushNotificationsChange = settingsViewModel::onPushNotificationsChange,
                             onNotificationSoundChange = settingsViewModel::onNotificationSoundChange,
                             onDarkModeChange = settingsViewModel::onDarkModeChange,
@@ -249,6 +250,7 @@ class MainActivity : ComponentActivity() {
                             onDeleteImage = profileViewModel::deleteImage,
                             onDeletePhoto = profileViewModel::deletePrimaryPhoto,
                             onDismissUploadMessage = profileViewModel::dismissMessage,
+                            onRefreshProfile = profileViewModel::refresh,
                             onSetSystemBars = { dark, green -> setSystemBars(dark, green) }
                         )
 

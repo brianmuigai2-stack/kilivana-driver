@@ -59,7 +59,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import com.example.kilivana_driver.data.model.TrackingHistoryPoint
 import com.example.kilivana_driver.data.model.Job
 import com.example.kilivana_driver.data.routing.RouteRepository
 import com.example.kilivana_driver.ui.components.KilivanaButton
@@ -99,12 +98,10 @@ import kotlinx.coroutines.withContext
 
 private enum class UiTripStage { HEADING_TO_PICKUP, IN_TRANSIT, DELIVERED }
 
-private const val DRIVER_BLUE = 0xFF3B82F6.toInt()
 private const val FARMER_GREEN = 0xFF2E7D32.toInt()
 private const val BUYER_RED = 0xFFE53935.toInt()
 private const val ROUTE_LINE = 0xFF1F6B2E.toInt()
 private const val PREVIEW_LINE = 0xFF8A94A6.toInt()
-private const val TRACKING_LINE = 0xFF3B82F6.toInt()
 private const val ROUTE_CAMERA_PITCH = 45.0
 
 /** Shows the active trip map, tracking history and pickup/delivery controls, forwarding completion to the caller. */
@@ -131,11 +128,12 @@ fun JobRouteScreen(
     val routePoints by tripViewModel.routePoints.collectAsStateWithLifecycle()
     val usingEstimatedRoute by tripViewModel.usingEstimatedRoute.collectAsStateWithLifecycle()
     val distanceLabel by tripViewModel.distanceLabel.collectAsStateWithLifecycle()
-    val queueSize by tripViewModel.queueSize.collectAsStateWithLifecycle()
-    val trackingPoints by tripViewModel.trackingPoints.collectAsStateWithLifecycle()
     val isSubmittingProof by tripViewModel.isSubmittingProof.collectAsStateWithLifecycle()
     val proofError by tripViewModel.proofError.collectAsStateWithLifecycle()
     val proofFiled by tripViewModel.proofFiled.collectAsStateWithLifecycle()
+    val isVerifyingOtp by tripViewModel.isVerifyingOtp.collectAsStateWithLifecycle()
+    val otpError by tripViewModel.otpError.collectAsStateWithLifecycle()
+    val otpVerified by tripViewModel.otpVerified.collectAsStateWithLifecycle()
     var evidencePhotoUri by remember(job.id) { mutableStateOf<Uri?>(null) }
     val pickEvidencePhoto = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -270,19 +268,17 @@ fun JobRouteScreen(
         }
     }
 
-    LaunchedEffect(routeMapAnnotations, pickupPoint, dropoffPoint, trackingPoints) {
+    LaunchedEffect(routeMapAnnotations, pickupPoint, dropoffPoint) {
         routeMapAnnotations?.drawPoints(
             pickupPoint = pickupPoint,
-            dropoffPoint = dropoffPoint,
-            trackingPoints = trackingPoints
+            dropoffPoint = dropoffPoint
         )
     }
 
-    LaunchedEffect(routeMapAnnotations, routePoints, previewRouteToBuyer, trackingPoints) {
+    LaunchedEffect(routeMapAnnotations, routePoints, previewRouteToBuyer) {
         routeMapAnnotations?.drawLines(
             activeRoute = routePoints,
-            previewRoute = previewRouteToBuyer,
-            trackingPoints = trackingPoints
+            previewRoute = previewRouteToBuyer
         )
     }
 
@@ -327,11 +323,16 @@ fun JobRouteScreen(
 
     var showOtpDialog by remember { mutableStateOf(false) }
     var showProofDialog by remember { mutableStateOf(false) }
-    var otpError by remember { mutableStateOf<String?>(null) }
-    var deliveryOtp by remember { mutableStateOf("") }
 
     LaunchedEffect(proofFiled) {
         if (proofFiled) onDeliveryComplete()
+    }
+
+    LaunchedEffect(job.id, otpVerified) {
+        if (otpVerified && showOtpDialog) {
+            showOtpDialog = false
+            showProofDialog = true
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -409,35 +410,8 @@ fun JobRouteScreen(
                 }
             }
 
-            // Offline queue indicator
-            if (queueSize > 0) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.Start)
-                        .shadow(2.dp, RoundedCornerShape(50))
-                        .clip(RoundedCornerShape(50))
-                        .background(KilivanaAmberTint)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = null,
-                        tint = KilivanaAmber,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Queued $queueSize location update(s) — will send when online",
-                        color = KilivanaAmber,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            if (lastError != null) {
+            val tripError = proofError ?: lastError
+            if (tripError != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier
@@ -456,7 +430,7 @@ fun JobRouteScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = lastError!!,
+                        text = tripError,
                         color = KilivanaNotificationRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
@@ -556,14 +530,23 @@ fun JobRouteScreen(
                     enabled = !isBusy
                 )
                 UiTripStage.IN_TRANSIT -> KilivanaButton(
-                    text = "Confirm Delivery (OTP)",
+                    text = if (otpVerified) "Upload Delivery Evidence" else "Confirm Delivery (OTP)",
                     onClick = {
-                        otpError = null
-                        showOtpDialog = true
+                        if (otpVerified) {
+                            showProofDialog = true
+                        } else {
+                            showOtpDialog = true
+                        }
                     },
-                    enabled = !isBusy
+                    enabled = !isBusy && !isSubmittingProof
                 )
-                UiTripStage.DELIVERED -> Unit
+                UiTripStage.DELIVERED -> if (otpVerified && !proofFiled) {
+                    KilivanaButton(
+                        text = "Upload Delivery Evidence",
+                        onClick = { showProofDialog = true },
+                        enabled = !isSubmittingProof
+                    )
+                }
             }
         }
     }
@@ -572,19 +555,12 @@ fun JobRouteScreen(
         OtpDialog(
             jobId = job.id,
             error = otpError,
+            isVerifying = isVerifyingOtp,
             onConfirm = { entered ->
-                if (entered.isNotBlank()) {
-                    deliveryOtp = entered
-                    showOtpDialog = false
-                    otpError = null
-                    showProofDialog = true
-                } else {
-                    otpError = "Enter the buyer's delivery code."
-                }
+                tripViewModel.verifyDeliveryOtp(entered)
             },
             onDismiss = {
-                showOtpDialog = false
-                otpError = null
+                if (!isVerifyingOtp) showOtpDialog = false
             }
         )
     }
@@ -600,18 +576,17 @@ fun JobRouteScreen(
                 )
             },
             onTakePhoto = { takeEvidencePhoto.launch(null) },
+            onRemovePhoto = { evidencePhotoUri = null },
             onSubmit = { recipientName, signatureUrl ->
                 tripViewModel.fileDeliveryProof(
-                    otp = deliveryOtp,
                     recipientName = recipientName,
-                    photoUrl = evidencePhotoUri?.toString().orEmpty(),
+                    photoUri = evidencePhotoUri,
                     signatureUrl = signatureUrl
                 )
             },
             onDismiss = {
                 if (!isSubmittingProof) {
                     showProofDialog = false
-                    deliveryOtp = ""
                 }
             }
         )
@@ -625,13 +600,11 @@ private class RouteMapAnnotations(
 ) {
     private val pickupIcon by lazy { createCircleBitmap(FARMER_GREEN) }
     private val dropoffIcon by lazy { createCircleBitmap(BUYER_RED) }
-    private val trackingIcon by lazy { createCircleBitmap(DRIVER_BLUE, radius = 9f) }
 
-    /** Replaces stop annotations with pickup, dropoff and the latest tracking ping when available. */
+    /** Replaces stop annotations with pickup and dropoff markers. */
     fun drawPoints(
         pickupPoint: GeoPoint,
-        dropoffPoint: GeoPoint,
-        trackingPoints: List<TrackingHistoryPoint>
+        dropoffPoint: GeoPoint
     ) {
         stopPointManager.deleteAll()
         stopPointManager.create(
@@ -661,28 +634,12 @@ private class RouteMapAnnotations(
                 .withTextHaloWidth(1.5)
         )
 
-        trackingPoints.lastOrNull()?.let { latest ->
-            stopPointManager.create(
-                PointAnnotationOptions()
-                    .withPoint(Point.fromLngLat(latest.longitude, latest.latitude))
-                    .withIconImage(trackingIcon)
-                    .withIconAnchor(IconAnchor.CENTER)
-                    .withTextField("Last ping")
-                    .withTextAnchor(TextAnchor.BOTTOM)
-                    .withTextOffset(listOf(0.0, -0.35))
-                    .withTextSize(11.0)
-                    .withTextColor(DRIVER_BLUE)
-                    .withTextHaloColor(android.graphics.Color.WHITE)
-                    .withTextHaloWidth(1.5)
-            )
-        }
     }
 
-    /** Replaces route lines with preview, active and tracking paths that each contain at least two points. */
+    /** Replaces route lines with preview and active paths that each contain at least two points. */
     fun drawLines(
         activeRoute: List<GeoPoint>?,
-        previewRoute: List<GeoPoint>?,
-        trackingPoints: List<TrackingHistoryPoint>
+        previewRoute: List<GeoPoint>?
     ) {
         lineManager.deleteAll()
         previewRoute?.takeIf { it.size >= 2 }?.let {
@@ -691,10 +648,6 @@ private class RouteMapAnnotations(
         activeRoute?.takeIf { it.size >= 2 }?.let {
             lineManager.createPolyline(it, ROUTE_LINE, width = 5.0, opacity = 0.95)
         }
-        trackingPoints
-            .map { GeoPoint(it.latitude, it.longitude) }
-            .takeIf { it.size >= 2 }
-            ?.let { lineManager.createPolyline(it, TRACKING_LINE, width = 3.0, opacity = 0.65) }
     }
 
     /** Releases the stop, vehicle and route annotation managers. */
@@ -755,18 +708,19 @@ private fun createCircleBitmap(
 private fun OtpDialog(
     jobId: String,
     error: String?,
+    isVerifying: Boolean,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var code by remember { mutableStateOf("") }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isVerifying) onDismiss() },
         title = { Text("Confirm delivery") },
         text = {
             Column {
                 Text(
-                    text = "Ask the buyer for their delivery code. You'll add delivery evidence next.",
+                    text = "Enter the delivery code sent to the buyer. After it is verified, you can upload delivery evidence.",
                     color = KilivanaTextMuted,
                     fontSize = 14.sp
                 )
@@ -787,12 +741,18 @@ private fun OtpDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(code) }) {
-                Text("Confirm", color = KilivanaGreen, fontWeight = FontWeight.Bold)
+            TextButton(onClick = { onConfirm(code) }, enabled = !isVerifying) {
+                Text(
+                    if (isVerifying) "Verifying..." else "Confirm",
+                    color = KilivanaGreen,
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = KilivanaTextMuted) }
+            TextButton(onClick = onDismiss, enabled = !isVerifying) {
+                Text("Cancel", color = KilivanaTextMuted)
+            }
         }
     )
 }
@@ -804,11 +764,11 @@ private fun DeliveryProofDialog(
     photoUri: Uri?,
     onPickPhoto: () -> Unit,
     onTakePhoto: () -> Unit,
+    onRemovePhoto: () -> Unit,
     onSubmit: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var recipientName by remember { mutableStateOf("") }
-    val hasEvidence = photoUri != null && photoUri.scheme !in setOf("content", "file")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -816,15 +776,9 @@ private fun DeliveryProofDialog(
         text = {
             Column {
                 Text(
-                    text = "The delivery code will be checked when you submit the proof.",
+                    text = "The delivery code was verified. A photo is optional; add the recipient name or attach photo/signature evidence.",
                     color = KilivanaTextMuted,
                     fontSize = 14.sp
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Photo uploads are not available yet. You can preview a selected photo, but proof cannot be submitted until uploads are supported.",
-                    color = KilivanaTextMuted,
-                    fontSize = 12.sp
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 OutlinedTextField(
@@ -847,6 +801,9 @@ private fun DeliveryProofDialog(
                             .height(140.dp)
                             .clip(RoundedCornerShape(12.dp))
                     )
+                    TextButton(onClick = onRemovePhoto, enabled = !isSubmitting) {
+                        Text("Remove photo", color = KilivanaTextMuted)
+                    }
                 }
                 if (error != null) {
                     Spacer(modifier = Modifier.height(6.dp))
@@ -857,10 +814,10 @@ private fun DeliveryProofDialog(
         confirmButton = {
             TextButton(
                 onClick = { onSubmit(recipientName, "") },
-                enabled = !isSubmitting && hasEvidence
+                enabled = !isSubmitting
             ) {
                 Text(
-                    text = if (isSubmitting) "Submitting..." else "Submit proof",
+                    text = if (isSubmitting) "Uploading & submitting..." else "Submit proof",
                     color = KilivanaGreen,
                     fontWeight = FontWeight.Bold
                 )

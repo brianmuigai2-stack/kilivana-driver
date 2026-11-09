@@ -12,7 +12,8 @@ enum class JobStatus(val label: String) {
     AVAILABLE("Available"),
     ACCEPTED("Accepted"),
     COMPLETED("Completed"),
-    CANCELLED("Cancelled")
+    CANCELLED("Cancelled"),
+    UNKNOWN("Unknown")
 }
 
 /**
@@ -52,7 +53,11 @@ data class Job(
     val deliveryOtp: String,
     val status: JobStatus,
     val isNew: Boolean = false,
-    val updatedAt: String = ""
+    val updatedAt: String = "",
+    /** Backend trip identifier returned after the driver accepts this job. */
+    val tripId: String? = null,
+    /** Raw lifecycle status from the backend, retained to restore the active trip stage. */
+    val backendStatus: String? = null
 ) {
     val distanceLabel: String
         get() = if (distanceKm > 0.0) {
