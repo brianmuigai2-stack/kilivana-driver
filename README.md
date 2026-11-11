@@ -2,7 +2,7 @@
 
 This Android app supports the Kilivana delivery workflow for drivers and the inspector workflow used by field staff. It combines a driver dashboard, live route guidance, profile management, and a role-based app shell so the same codebase can serve both user types.
 
-> Status: the app is being developed against the live Kilivana backend with a local development fallback and a Render backup. Driver-side profile features are live, while some job history, notifications, and job data remain sample-backed placeholders.
+> Status: the app is being developed against the live Kilivana backend with a local development fallback and a Render backup. Driver-side profile features and jobs use the backend; delivery history is derived from jobs, while notifications use sample data.
 
 ## Overview
 
@@ -17,12 +17,12 @@ Kilivana connects farmers, buyers, and field staff. In this app:
 ### Driver experience
 
 - Splash screen with branded background and app launch flow.
-- Driver login flow with phone number and password input.
+- Driver login flow with email address and password input.
 - Dashboard with greeting, recent activity, quick actions, and notification state.
 - Jobs list with Available, Accepted, and Completed views.
 - Job detail flow with accept or decline options and trip lifecycle actions.
 - En route experience showing device location, route guidance, pickup and delivery status, and labelled points for the driver, farmer, and buyer.
-- Map tab with live OpenStreetMap tiles, current location marker, and recenter behavior.
+- Map tab with Mapbox Standard map tiles, current location marker, and recenter behavior.
 - History, notifications, profile, and settings screens.
 - Profile photo upload, crop, and delete support using UCrop and Coil.
 
@@ -39,13 +39,14 @@ Kilivana connects farmers, buyers, and field staff. In this app:
 | --- | --- |
 | Screens and navigation | Real |
 | GPS location | Real via Google Play Services Location |
-| Map tiles | Real via OpenStreetMap |
+| Map tiles | Real via Mapbox Standard |
 | Road routes | Real via Mapbox Directions API with a fallback |
-| Driver login | Placeholder for production auth; accepts basic demo credentials |
-| Inspector login | Active UI flow with mocked/session-based auth logic |
+| Driver login | Backend authentication via `AuthRepository.login` |
+| Inspector login | Backend authentication via `AuthRepository.login`, with an inspector role check |
 | Profile read/update/image upload | Real |
 | Driver photo on profile/dashboard | Real |
-| Jobs, notifications, history data | Sample data in ViewModels |
+| Jobs and history data | Jobs loaded from the backend via `JobsRepository`; history derived from completed and cancelled jobs |
+| Notifications data | Sample data in `NotificationsViewModel` |
 | Dark mode | Toggle exists, theme not fully implemented |
 | Language switching | UI state exists, translations not complete |
 | Push notifications | Not implemented |
@@ -58,7 +59,6 @@ Kilivana connects farmers, buyers, and field staff. In this app:
 - Retrofit + OkHttp + kotlinx.serialization for API calls
 - DataStore and security storage for local preferences/session handling
 - Mapbox Maps and Mapbox Directions API for map tiles and routes
-- OpenStreetMap integration for map display
 - Google Play Services Location for GPS tracking
 - UCrop for image cropping before upload
 - Coil for image loading
@@ -156,13 +156,13 @@ The API layer includes:
 - State is managed with feature-specific `UiState` objects and `ViewModel` ownership.
 - Navigation is currently handled in a lightweight app state flow rather than a full Compose navigation graph.
 - The app uses a green status-bar scrim in several screens to match the design system.
-- Sample data is intentionally marked with `TODO` comments so it can be replaced with real backend data.
+- Notifications use sample data pending backend integration.
 
 ## Roadmap
 
 - [ ] Delivery confirmation workflow after marking trips as delivered
-- [ ] Real authentication and secure token storage
-- [ ] Connect jobs, history, and notifications to the backend API
+- [x] Backend authentication and encrypted storage for remembered tokens
+- [ ] Connect notifications to the backend API
 - [ ] Push notifications via Firebase Cloud Messaging
 - [ ] Background location while a trip is active
 - [ ] Deep-link notifications to related jobs
