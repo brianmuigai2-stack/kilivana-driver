@@ -16,27 +16,10 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Single shared entry point for talking to the Kilivana backend.
- *
- * The backend is currently exposed through a free ngrok tunnel while it's
- * in development. Free ngrok tunnels show an interstitial "you're about to
- * visit..." warning page to any request that doesn't explicitly say it
- * isn't a browser — [ngrokHeaderInterceptor] adds that header to every
- * request made through this client. Without it, every API call gets
- * ngrok's HTML warning page back instead of real JSON, which looks like a
- * confusing parse error rather than what it actually is.
- *
- * The ngrok tunnel is unreliable — it drops connections often enough that a
- * call can fail with a bare [java.io.IOException] while the tunnel is
- * restarting. [HostFailoverInterceptor] retries those failures against the
- * Render deployment in [FALLBACK_BASE_URL], and remembers whichever host
- * answered last so later calls skip the dead one.
  */
 object ApiClient {
 
-    const val BASE_URL = "https://hankering-morphing-outclass.ngrok-free.dev/"
-    const val FALLBACK_BASE_URL = "https://kilivana-backend-a44w.onrender.com/"
-    const val LOCAL_BASE_URL = "http://10.0.2.2:8080/"
-    const val LAN_BASE_URL = "http://192.168.137.112:8080/"
+    const val BASE_URL = "https://kilivana-backend-1jte.onrender.com/"
 
     @Volatile
     private var preferredBackendBaseUrl: String? = null
@@ -53,94 +36,9 @@ object ApiClient {
         coerceInputValues = true
     }
 
-    /**
-     * Retries a request against a list of fallback hosts when the primary ngrok
-     * host fails at the transport level or returns an HTML error page.
-     *
-     * Only [java.io.IOException] or an HTML response body triggers a retry.
-     * An HTTP error status (401, 404, etc.) from a real backend is returned to
-     * the caller as usual — retrying it would only double the round trip.
-     *
-     * Remembers the last host that responded so a dead tunnel costs one slow
-     * call rather than one slow call per request.
-     */
-    private class HostFailoverInterceptor(
-        private val fallbackUrls: List<String>,
-    ) : Interceptor {
-
-        @Volatile
-        private var preferredHost: String? = null
-
-        private val fallbacks = fallbackUrls.map { it.toHttpUrl() }
-
-        private fun isHtml(response: Response): Boolean {
-            val type = response.header("Content-Type").orEmpty()
-            return type.contains("text/html", ignoreCase = true)
-        }
-
-        override fun intercept(chain: Interceptor.Chain): Response {
-            val request = chain.request()
-            val hosts = buildList {
-                preferredHost?.let { add(it) }
-                add(request.url.host)
-                fallbacks.forEach { add(it.host) }
-            }.distinct()
-
-            var lastFailure: IOException? = null
-
-            for (host in hosts) {
-                val fallback = fallbacks.find { it.host == host } ?: fallbacks.first()
-                val target = if (host == request.url.host) {
-                    request
-                } else {
-                    request.newBuilder()
-                        .url(
-                            request.url.newBuilder()
-                                .scheme(fallback.scheme)
-                                .host(host)
-                                .port(fallback.port)
-                                .build()
-                        )
-                        .build()
-                }
-
-                try {
-                    val response = chain.proceed(target)
-
-                    // A dead ngrok tunnel answers with HTTP 404 and an HTML
-                    // error page, so it looks like a real server response.
-                    // The API only ever speaks JSON, so treat any HTML body as
-                    // a transport failure and move on to the next host instead
-                    // of surfacing a misleading 404 to the user.
-                    if (isHtml(response)) {
-                        response.close()
-                        lastFailure = IOException("Tunnel at $host is offline")
-                        continue
-                    }
-
-                    // Any real backend response proves this host is alive, even
-                    // a 401 — otherwise every later call would keep paying the
-                    // dead tunnel's timeout first.
-                    preferredHost = host
-                    preferredBackendBaseUrl = target.url.newBuilder()
-                        .encodedPath("/")
-                        .build()
-                        .toString()
-                    return response
-                } catch (e: IOException) {
-                    lastFailure = e
-                }
-            }
-
-            throw lastFailure ?: IOException("All backend hosts failed")
-        }
-    }
-
     private val ngrokHeaderInterceptor = Interceptor { chain ->
         val request = chain.request().newBuilder()
             .apply {
-                // Only the tunnel host understands this header; sending it to
-                // the Render deployment would be noise.
                 if (chain.request().url.host.endsWith("ngrok-free.dev")) {
                     header("ngrok-skip-browser-warning", "true")
                 }
@@ -162,23 +60,12 @@ object ApiClient {
 
     val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            // Outermost so a retry re-enters the whole chain, including the
-            // bearer token and debug logging.
-            .addInterceptor(HostFailoverInterceptor(listOf(FALLBACK_BASE_URL, LOCAL_BASE_URL)))
             .addInterceptor(ngrokHeaderInterceptor)
-            // Bearer token must be added after the ngrok header, and applies to
-            // every protected call regardless of whether a token exists yet.
             .addInterceptor(AuthInterceptor())
             .apply {
-                // Only wire the 401 refresh once we can read a refresh token;
-                // without preferences it would loop on 401 with no way out.
                 sessionPreferences?.let { prefs ->
                     authenticator(TokenAuthenticator(refreshApi = refreshApi, preferences = prefs))
                 }
-                // Full request/response bodies in Logcat, debug builds only.
-                // Secrets are masked first: the Authorization header, and the
-                // password / token fields inside JSON bodies, so a copied
-                // Logcat never leaks a login.
                 if (BuildConfig.DEBUG) {
                     addInterceptor(
                         HttpLoggingInterceptor { message ->
@@ -205,7 +92,6 @@ object ApiClient {
             .baseUrl(BASE_URL)
             .client(
                 OkHttpClient.Builder()
-.addInterceptor(HostFailoverInterceptor(listOf(FALLBACK_BASE_URL, LOCAL_BASE_URL, LAN_BASE_URL)))
                     .addInterceptor(ngrokHeaderInterceptor)
                     .connectTimeout(15, TimeUnit.SECONDS)
                     .readTimeout(15, TimeUnit.SECONDS)

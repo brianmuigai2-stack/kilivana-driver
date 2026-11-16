@@ -2,6 +2,7 @@
 
 This Android app supports the Kilivana delivery workflow for drivers and the inspector workflow used by field staff. It combines a driver dashboard, live route guidance, profile management, and a role-based app shell so the same codebase can serve both user types.
 
+> Status: the app is being developed against the live Kilivana backend. Driver-side profile features are live, while some job history, notifications, and job data remain sample-backed placeholders.
 > Status: the app is being developed against the live Kilivana backend with a local development fallback and a Render backup. Driver-side profile features and jobs use the backend; delivery history is derived from jobs, while notifications use sample data.
 
 ## Overview
@@ -138,16 +139,10 @@ app/src/main/java/com/example/kilivana_driver/
 
 ## Backend and network behaviour
 
-The app is configured to talk to a Kilivana backend through a development host and failover flow:
-
-- `BASE_URL` is the primary ngrok tunnel used during local development.
-- `FALLBACK_BASE_URL` is a hosted Render deployment used as a backup.
-- `LOCAL_BASE_URL` and `LAN_BASE_URL` are provided for machine-local testing.
+The app is configured to talk to the Kilivana backend at `https://kilivana-backend-1jte.onrender.com/`.
 
 The API layer includes:
 
-- `ngrokHeaderInterceptor` to skip ngrok browser warnings.
-- `HostFailoverInterceptor` to retry on alternate hosts when the current one fails.
 - `AuthInterceptor` and `TokenAuthenticator` to attach and refresh bearer tokens centrally.
 - `ProfileApi`/`ProfileRepository` for profile data and image workflows.
 

@@ -32,9 +32,7 @@ class JobsRepository(
 
     private val errorJson = Json { ignoreUnknownKeys = true }
 
-    /** Safety-net timeout: the OkHttp client has 15s per-host timeouts, but the
-     * HostFailoverInterceptor retries across multiple hosts, so the total can
-     * stretch to 45s+. This caps every call so the UI never hangs forever. */
+    /** Safety-net timeout: caps every call so the UI never hangs forever. */
     private val API_TIMEOUT_MS = 30_000L
 
     /**
@@ -219,11 +217,6 @@ class JobsRepository(
      * Inspects a raw exception and maps it to a [JobsException] with the right
      * [JobsErrorType], so the UI can show the right message for "no internet",
      * "server down", or a generic error.
-     *
-     * The network layer wraps the real OkHttp call in [HostFailoverInterceptor],
-     * which retries across multiple hosts and re-throws the last IOException —
-     * so the original exception subtype (UnknownHostException, ConnectException,
-     * etc.) is preserved and used here for classification.
      */
     private fun classifyException(e: Exception): JobsException = when (e) {
         is UnknownHostException ->
