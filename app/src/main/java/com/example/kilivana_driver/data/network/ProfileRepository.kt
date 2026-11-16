@@ -187,10 +187,7 @@ class ProfileRepository(
         if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
             val uri = runCatching { java.net.URI(trimmed) }.getOrNull()
             val host = uri?.host?.lowercase()
-            val lanHost = runCatching { java.net.URI(ApiClient.LAN_BASE_URL).host }.getOrNull()
-            if (host == "localhost" || host == "127.0.0.1" || host == "10.0.2.2" ||
-                host == "0.0.0.0" || host == lanHost
-            ) {
+            if (host == "localhost" || host == "127.0.0.1" || host == "10.0.2.2" || host == "0.0.0.0") {
                 val pathAndQuery = uri?.rawPath.orEmpty() +
                     uri?.rawQuery?.let { "?$it" }.orEmpty()
                 return ApiClient.backendUrlFor(pathAndQuery)
