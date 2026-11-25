@@ -26,6 +26,8 @@ import java.util.Locale
 data class DeliveryJob(
     val id: Long = 0L,
     val orderId: Long = 0L,
+    val sellerId: Long = 0L,
+    val buyerId: Long = 0L,
     val pickupAddress: String? = null,
     val destinationAddress: String? = null,
     val pickupLatitude: Double = 0.0,
@@ -89,7 +91,7 @@ data class DeliveryJob(
         distanceKm = distanceKm,
         estimatedTime = formatMinutes(estimatedMinutes),
         payoutKsh = payoutAmount.toInt(),
-        customer = "",
+        customer = if (buyerId > 0L) buyerId.toString() else "",
         deliveryOtp = "",
         status = mapStatus(status),
         isNew = false,
