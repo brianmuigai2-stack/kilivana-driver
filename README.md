@@ -2,8 +2,13 @@
 
 This Android app supports the Kilivana delivery workflow for drivers and the inspector workflow used by field staff. It combines a driver dashboard, live route guidance, profile management, and a role-based app shell so the same codebase can serve both user types.
 
-> Status: the app is being developed against the live Kilivana backend. Driver-side profile features are live, while some job history, notifications, and job data remain sample-backed placeholders.
-> Status: the app is being developed against the live Kilivana backend with a local development fallback and a Render backup. Driver-side profile features and jobs use the backend; delivery history is derived from jobs, while notifications use sample data.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:bde07e53fd3514c38590e29f4e60ed885c20bb3a096c92b70b737f1f7a29a178 -->
+
+> Status: the app is being developed against the live Kilivana backend. Driver-side profile features and jobs use the backend; delivery history is derived from jobs, while notifications use sample data.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ## Overview
 
